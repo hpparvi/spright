@@ -6,7 +6,7 @@ from matplotlib.pyplot import subplots, setp
 from numpy import inf, log, array, percentile, argmin, ndarray
 from scipy.optimize import minimize
 
-from mmmbop.model import spdf
+from .model import spdf
 
 np.seterr(invalid='ignore')
 
