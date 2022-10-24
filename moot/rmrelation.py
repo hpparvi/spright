@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional
 
 import astropy.io.fits as pf
 import numpy as np
@@ -12,8 +12,10 @@ from .model import sample_density, sample_mass, rocky_radius_density
 np.seterr(invalid='ignore')
 
 
-class RadiusMassRelation:
-    def __init__(self, fname: Union[str, Path] = 'rdmap.fits'):
+class RMRelation:
+    def __init__(self, fname: Optional[Union[str, Path]] = None):
+        if fname is None:
+            fname = Path(__file__).parent / 'data' / 'rdmap.fits'
         with pf.open(fname) as f:
             self.rd_posterior = f[0].data.copy()
             self.icdf = f[1].data.copy()

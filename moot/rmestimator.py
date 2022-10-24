@@ -13,7 +13,7 @@ from .model import model, lnlikelihood_vp, create_radius_density_icdf
 from .lpf import LPF, map_pv
 
 
-class MREstimator:
+class RMEstimator:
     def __init__(self, nsamples: int = 50):
         self._df = df = read_stpm()
         self._m_good = m = (df.eM_relative <= 0.25) & (df.eR_relative <= 0.08)
