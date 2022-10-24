@@ -1,0 +1,29 @@
+[project]
+name = "moot"
+version = "0.5.0"
+description = 'Radius-mass relation for small planets orbiting M dwarfs.'
+authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
+classifiers=[
+  "Topic :: Scientific/Engineering",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+]
+keywords = ['astronomy',  'astrophysics',  'exoplanets']
+dependencies = ["numpy", "numba", "scipy", "pandas", "astropy", "pytransit"]
+
+[project.urls]
+homepage = 'https://github.com/hpparvi/'
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ['moot', 'moot.data']
