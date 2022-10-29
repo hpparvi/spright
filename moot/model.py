@@ -39,7 +39,7 @@ def model(rho, radius, theta, component):
 
     x1 = lerp(radius, a1, a2)
     x2 = lerp(radius, a3, a4)
-    m3 = m3 + (radius - a4)*dr
+    m3 = m3 + (radius - a3)*dr
 
     r = rocky_radius_density(radius)
 
@@ -84,7 +84,7 @@ def lnlikelihood_vp(pvp, densities, radii):
     cs = ones(3)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3]:
+        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
