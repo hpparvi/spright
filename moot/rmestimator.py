@@ -3,11 +3,13 @@ import astropy.units as u
 import astropy.constants as c
 import uncertainties.unumpy as un
 from astropy.table import Table
+from astropy.time import Time
 from matplotlib.pyplot import subplots, setp
 from numpy import pi, diag, array, full, linspace, meshgrid, asarray, zeros, argmin, sort, ones, squeeze
 from numpy.random import multivariate_normal, permutation, seed
 from scipy.optimize import minimize
 
+from . import version
 from .core import read_stpm
 from .model import model, lnlikelihood_vp, create_radius_density_icdf
 from .lpf import LPF, map_pv
@@ -23,6 +25,7 @@ class RMEstimator:
         self._masse = me = df[['edM_Mterra', 'euM_Mterra']].mean(axis=1).values[m]
         rhos = (un.uarray(mm, me) * c.M_earth.to(u.g).value) / (4/3 * pi * (un.uarray(r, re) * c.R_earth.to(u.cm).value)**3)
         self._rhom = un.nominal_values(rhos)
+
         self._rhoe = un.std_devs(rhos)
 
         self.lpf = LPF(r, re, mm, me, nsamples)
@@ -96,6 +99,9 @@ class RMEstimator:
         rdh.header['CRVAL2'] = r[0]
         rdh.header['CDELT2'] = r[1] - r[0]
 
+        rdh.header['CREATOR'] = f'Moot v{str(version)} '
+        rdh.header['CREATED'] = Time.now().to_value('fits', 'date')
+
         ich.header['CTYPE1'] = 'icdf'
         ich.header['CRPIX1'] = 1
         ich.header['CRVAL1'] = p[0]
@@ -106,7 +112,18 @@ class RMEstimator:
         ich.header['CRVAL2'] = r[0]
         ich.header['CDELT2'] = r[1] - r[0]
 
-        hdul = pf.HDUList([rdh, ich, smh])
+        # Catalogue
+        cat = pf.BinTableHDU(Table.from_pandas(self._df), name='catalogue')
+
+        # Radius, mass, and density samples
+        tbs = Table(data=[self.lpf.radius_samples.ravel(),
+                          self.lpf.mass_samples.ravel(),
+                          self.lpf.density_samples.ravel()],
+                    names=['radius', 'mass', 'density'],
+                    units=['R_Earth', 'M_Earth', 'g cm^-3'])
+        rms = pf.BinTableHDU(tbs, name='rmsamples')
+
+        hdul = pf.HDUList([rdh, ich, smh, cat, rms])
         hdul.writeto('rdmap.fits', overwrite=True)
 
 
