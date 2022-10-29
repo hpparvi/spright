@@ -41,20 +41,20 @@ class LPF(LogPosteriorFunction):
         self.density_samples = ((m * u.M_earth) / (4/3*pi*(r * u.R_earth)**3)).to(u.g/u.cm**3).value
 
     def _init_parameters(self):
-        self.ps = PS([GP('rrw1', 'rocky-water transition start',    'R_earth',   UP( 1.0,  1.8),  (0.0, inf)),
-            GP('rrw2', 'rocky-water transition end',     'R_earth',   UP( 1.6,  2.2),  (0.0, inf)),
-            GP('rwp1', 'water-puffy transition start',    'R_earth',   UP(1.8,  2.6),  (0.0, inf)),
-            GP('rwp2', 'water-puffy transition end',     'R_earth',   UP( 2.0,  2.8),  (0.0, inf)),
-            GP('mrr', 'RP density pdf mean', 'rho_rocky', NP(0.9, 0.5), (0.0, inf)),
-            GP('mrw', 'WW density pdf mean', 'rho_rocky', NP(0.4, 0.5), (0.0, inf)),
-            GP('mrp', 'SN density pdf mean', 'rho_rocky', NP(0.2, 0.5), (0.0, inf)),
-            GP('srr', 'RP density pdf scale', 'rho_rocky', UP(-3.0, 0.0), (-inf, inf)),
-            GP('srw', 'WW density pdf scale', 'rho_rocky', UP(-3.0, 0.0), (-inf, inf)),
-            GP('srp', 'SN density pdf scale', 'rho_rocky', UP(-3.0, 0.0), (-inf, inf)),
-            GP('l1', 'RP density pdf dof', '', NP(0.0, 0.5), (-inf, inf)),
-            GP('l2', 'WW density pdf dof', '', NP(0.0, 0.5), (-inf, inf)),
-            GP('l3', 'SN density pdf dof', '', NP(0.0, 0.5), (-inf, inf)),
-            GP('drdr', 'SN density slope', 'drho/drad', NP(0.0, 1.0), (-inf, inf))])
+        self.ps = PS([GP('rrw1', 'rocky-water transition start',   'R_earth',   NP( 1.4, 0.2), ( 0.0, inf)),
+                     GP('rrw2',  'rocky-water transition end',     'R_earth',   NP( 1.8, 0.2), ( 0.0, inf)),
+                     GP('rwp1',  'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
+                     GP('rwp2',  'water-puffy transition end',     'R_earth',   NP( 2.5, 0.3), ( 0.0, inf)),
+                     GP('mrr',   'RP density pdf mean',            'rho_rocky', NP( 0.9, 0.2), ( 0.0, inf)),
+                     GP('mrw',   'WW density pdf mean',            'rho_rocky', NP( 0.4, 0.2), ( 0.0, inf)),
+                     GP('mrp',   'SN density pdf mean',            'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
+                     GP('srr',   'RP density pdf scale',           'rho_rocky', NP( 0.0, 0.4), (-inf, inf)),
+                     GP('srw',   'WW density pdf scale',           'rho_rocky', NP( 0.0, 0.4), (-inf, inf)),
+                     GP('srp',   'SN density pdf scale',           'rho_rocky', NP( 0.0, 0.4), (-inf, inf)),
+                     GP('l1',    'RP density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
+                     GP('l2',    'WW density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
+                     GP('l3',    'SN density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
+                     GP('drdr',  'SN density slope',               'drho/drad', NP( 0.0, 1.0), (-inf, inf))])
         self.ps.freeze()
 
     @staticmethod
