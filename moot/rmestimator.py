@@ -9,7 +9,7 @@ from numpy import pi, diag, array, full, linspace, meshgrid, asarray, zeros, arg
 from numpy.random import multivariate_normal, permutation, seed
 from scipy.optimize import minimize
 
-from . import version
+#from . import version
 from .core import read_stpm
 from .model import model, lnlikelihood_vp, create_radius_density_icdf
 from .lpf import LPF, map_pv

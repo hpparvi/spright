@@ -25,6 +25,8 @@ class RMRelation:
             self.radii = h1['CRVAL2'] + arange(h1['NAXIS2']) * h1['CDELT2']
             self.probs = h1['CRVAL1'] + arange(h1['NAXIS1']) * h1['CDELT1']
             self.posterior_samples = Table.read(fname).to_pandas()
+            self.catalog = Table.read(fname, 3).to_pandas()
+            self.rdsamples = Table.read(fname, 4).to_pandas()
 
     def sample(self, quantity, radius, nsamples: int = 5000):
         try:
