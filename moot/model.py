@@ -1,8 +1,11 @@
 import astropy.units as u
 
 from math import gamma
+
+from matplotlib.pyplot import subplots
 from numba import njit, prange
-from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray
+from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
+    nan
 from numpy.random import normal, uniform
 from scipy.interpolate import RegularGridInterpolator
 
@@ -39,7 +42,7 @@ def model(rho, radius, theta, component):
 
     x1 = lerp(radius, a1, a2)
     x2 = lerp(radius, a3, a4)
-    m3 = m3 + (radius - a3)*dr
+    m3 = m3 + (radius - 2.2)*dr
 
     r = rocky_radius_density(radius)
 
@@ -50,9 +53,10 @@ def model(rho, radius, theta, component):
 
 
 @njit(parallel=True)
-def average_model(samples, density, radius):
+def average_model(samples, density, radius, components = None):
     npv = samples.shape[0]
-    components = ones(3)
+    if components is None:
+        components = ones(3)
     t = zeros_like(density)
     for i in prange(npv):
         t += model(density, radius, samples[i], components)
@@ -111,17 +115,19 @@ def invert_cdf(values, cdf, res):
 
 def create_radius_density_map(pvs: ndarray,
                               rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
-                              rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray):
+                              rres: int = 200, dres: int = 100, components = None) -> (ndarray, ndarray, ndarray):
     radii = linspace(*rlims, num=rres)
     densities = linspace(*dlims, num=dres)
     dgrid, rgrid = meshgrid(densities, radii)
-    m = average_model(pvs, dgrid.ravel(), rgrid.ravel()).reshape(rgrid.shape)
+    if components is None:
+        components = ones(3)
+    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components=components).reshape(rgrid.shape)
     return radii, densities, m
 
 
 def create_radius_density_icdf(pvs: ndarray, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
-                               rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray):
+                               rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
     radii, densities, rdmap = create_radius_density_map(pvs, rlims, dlims, rres, dres)
     cdf = rdmap.cumsum(axis=1)
     cdf /= cdf[:, -1:]
@@ -150,3 +156,38 @@ def sample_mass(radius: tuple[float, float],
     samples = m_g.to(u.M_earth).value
     return samples[isfinite(samples)]
 
+def model_means(pv: ndarray, npt: int = 500, dmin: float = 0.5, dmax: float = 5.5):
+    radius = linspace(dmin, dmax, npt)
+    models = {'rocky': zeros((2, npt)), 'water': zeros((2, npt)), 'puffy': zeros((2, npt))}
+    models['rocky'][0] = where(radius < pv[1], pv[4]*rocky_radius_density(radius), nan)
+    models['rocky'][1] = where(radius < pv[0], pv[4]*rocky_radius_density(radius), nan)
+    models['water'][0] = where((radius >= pv[0]) & (radius <= pv[3]), pv[5]*rocky_radius_density(radius), nan)
+    models['water'][1] = where((radius >= pv[1]) & (radius <= pv[2]), pv[5]*rocky_radius_density(radius), nan)
+    models['puffy'][0] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[13], nan)
+    models['puffy'][1] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[13], nan)
+    return radius, models
+
+
+def plot_model_means(pv: ndarray, plot_widths: bool = True, plot_ref_rocky: bool = False,
+                     npt: int = 500, dmin: float = 0.5, dmax: float = 5.5, ax=None):
+    if ax is None:
+        fig, ax = subplots()
+
+    radius, models = model_means(pv, npt=npt, dmin=dmin, dmax=dmax)
+
+    for j, (kind, model) in enumerate(models.items()):
+        for i in range(2):
+            ax.plot(radius, model[i], c=f"C{j}", alpha=(0.3, 0.8)[i % 2], ls=('--', '-')[i % 2])
+
+    if plot_widths:
+        sr, sw, sp = 10 ** pv[7:10]
+        for i in (-1, 1):
+            ax.plot(radius, models['rocky'][0] + i * sr, alpha=0.2, ls='--', c='C0')
+            ax.plot(radius, models['water'][0] + i * sw, alpha=0.2, ls='--', c='C1')
+            ax.plot(radius, models['puffy'][0] + i * sp, alpha=0.2, ls='--', c='C2')
+
+    if plot_ref_rocky:
+        rd = rocky_radius_density(radius)
+        ax.plot(radius, where(rd < 15, rd, nan), 'k', alpha=0.2)
+
+    return ax
