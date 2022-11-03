@@ -35,28 +35,32 @@ def rocky_radius_density(r):
 @njit
 def model(rho, radius, theta, component):
     a1, a2, a3, a4 = theta[0:4]
-    m1, m2, m3 = theta[4:7]
-    s1, s2, s3 = theta[7:10]
-    l1, l2, l3 = theta[10:13]
-    dr = theta[13]
-
-    x1 = lerp(radius, a1, a2)
-    x2 = lerp(radius, a3, a4)
-    m3 = m3 + (radius - 2.2)*dr
+    m1, m2, m3, m4 = theta[4:8]
+    s1, s2, s3, s4 = theta[8:12]
+    l1, l2, l3, l4 = theta[12:16]
+    dr1, dr2 = theta[16:18]
+    alpha = theta[18]
 
     r = rocky_radius_density(radius)
 
-    c1 = component[0]*(1.0 - x1)*spdf(rho, m1*r, s1, l1)
-    c2 = component[1]*x1*(1.0 - x2)*spdf(rho, m2*r, s2, l2)
-    c3 = component[2]*x1*x2*spdf(rho, m3, s3, l3)
-    return c1 + c2 + c3
+    x1 = lerp(radius, a1, a2)
+    x2 = lerp(radius, a3, a4)
+    m3 = m3 + (radius - 2.2)*dr1
+    m4 = m4 + (radius - 2.2)*dr2
+
+    c1 = component[0] * (1.0 - x1)                            * spdf(rho, m1*r, s1, l1)
+    c2 = component[1] *        x1 *        alpha * (1.0 - x2) * spdf(rho, m2*r, s2, l2)
+    c3 = component[2] *        x1 *        alpha *        x2  * spdf(rho, m3, s3, l3)
+    c4 = component[3] *        x1 * (1.0 - alpha)             * spdf(rho, m4, s4, l4)
+
+    return c1 + c2 + c3 + c4
 
 
 @njit(parallel=True)
 def average_model(samples, density, radius, components = None):
     npv = samples.shape[0]
     if components is None:
-        components = ones(3)
+        components = ones(4)
     t = zeros_like(density)
     for i in prange(npv):
         t += model(density, radius, samples[i], components)
@@ -65,7 +69,7 @@ def average_model(samples, density, radius, components = None):
 
 @njit
 def lnlikelihood(theta, densities, radii):
-    lnl = log(model(densities, radii, theta, ones(3))).sum()
+    lnl = log(model(densities, radii, theta, ones(4))).sum()
     return lnl if isfinite(lnl) else inf
 
 
@@ -73,7 +77,7 @@ def lnlikelihood(theta, densities, radii):
 def lnlikelihood_v(pvp, densities, radii):
     npv = pvp.shape[0]
     lnl = zeros(npv)
-    cs = ones(3)
+    cs = ones(4)
     for i in range(npv):
         lnl[i] = log(model(densities, radii, pvp[i], cs)).sum()
         lnl[i] = lnl[i] if isfinite(lnl[i]) else inf
@@ -85,7 +89,7 @@ def lnlikelihood_vp(pvp, densities, radii):
     npv = pvp.shape[0]
     ns = densities.shape[0]
     lnl = zeros(npv)
-    cs = ones(3)
+    cs = ones(4)
     for i in prange(npv):
         lnt = zeros(ns)
         if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2]:
@@ -120,7 +124,7 @@ def create_radius_density_map(pvs: ndarray,
     densities = linspace(*dlims, num=dres)
     dgrid, rgrid = meshgrid(densities, radii)
     if components is None:
-        components = ones(3)
+        components = ones(4)
     m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components=components).reshape(rgrid.shape)
     return radii, densities, m
 

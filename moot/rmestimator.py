@@ -44,7 +44,11 @@ class RMEstimator:
         return self.lpf.model(rho, radius, pv, component)
 
     def optimize(self, x0=None):
-        x0 = x0 or array([1.4, 1.8, 2.2, 2.5, 0.9, 0.4, 0.2, -1, -1, -1, 0.0, 0.0, 0.0, -0.001])
+        x0 = x0 or array([1.4, 1.8, 2.2, 2.5,
+                          0.9, 0.4, 2.0, 2.0,
+                          -0.5, -0.5, -0.5, -0.5,
+                          0.0, 0.0, 0.0, 0.0,
+                          -0.001, -0.001, 0.5])
         self._optimization_result = minimize(lambda x: -self.lpf.lnposterior(x), x0, method='Powell')
 
     def sample_mcmc(self, niter: int = 500, thin: int = 5, repeats: int = 1, npop: int = 150, population=None,
