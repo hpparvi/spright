@@ -34,24 +34,26 @@ def rocky_radius_density(r):
 
 @njit
 def model(rho, radius, theta, component):
-    a1, a2, a3, a4 = theta[0:4]
-    m1, m2, m3, m4 = theta[4:8]
-    s1, s2, s3, s4 = theta[8:12]
-    l1, l2, l3, l4 = theta[12:16]
-    dr1, dr2 = theta[16:18]
-    alpha = theta[18]
+    a1, a2, a3, a4, a5, a6 = theta[0:6]
+    m1, m2, m3, m4 = theta[6:10]
+    s1, s2, s3, s4 = theta[10:14]
+    l1, l2, l3, l4 = theta[14:18]
+    dr1, dr2 = theta[18:20]
+    alpha = theta[20]
 
     r = rocky_radius_density(radius)
 
     x1 = lerp(radius, a1, a2)
     x2 = lerp(radius, a3, a4)
+    x3 = lerp(radius, a5, a6)
     m3 = m3 + (radius - 2.2)*dr1
     m4 = m4 + (radius - 2.2)*dr2
 
-    c1 = component[0] * (1.0 - x1)                            * spdf(rho, m1*r, s1, l1)
-    c2 = component[1] *        x1 *        alpha * (1.0 - x2) * spdf(rho, m2*r, s2, l2)
-    c3 = component[2] *        x1 *        alpha *        x2  * spdf(rho, m3, s3, l3)
-    c4 = component[3] *        x1 * (1.0 - alpha)             * spdf(rho, m4, s4, l4)
+    c1  = component[0] * (1.0 - x1) *        alpha              * spdf(rho, m1*r, s1, l1)
+    c2  = component[1] *        x1  *        alpha * (1.0 - x2) * spdf(rho, m2*r, s2, l2)
+    c3  = component[2] *        x1  *        alpha *        x2  * spdf(rho, m3, s3, l3)
+    c4  = component[3] * (1.0 - x3) * (1.0 - alpha)             * spdf(rho, m1*r, s1, l1)
+    c4 += component[3] *        x3  * (1.0 - alpha)             * spdf(rho, m4, s4, l4)
 
     return c1 + c2 + c3 + c4
 
@@ -92,7 +94,7 @@ def lnlikelihood_vp(pvp, densities, radii):
     cs = ones(4)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2]:
+        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2] or pvp[i, 4] > pvp[i, 5]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
@@ -161,15 +163,18 @@ def sample_mass(radius: tuple[float, float],
     return samples[isfinite(samples)]
 
 def model_means(pv: ndarray, npt: int = 500, dmin: float = 0.5, dmax: float = 5.5):
-    radius = linspace(dmin, dmax, npt)
-    models = {'rocky': zeros((2, npt)), 'water': zeros((2, npt)), 'puffy': zeros((2, npt))}
-    models['rocky'][0] = where(radius < pv[1], pv[4]*rocky_radius_density(radius), nan)
-    models['rocky'][1] = where(radius < pv[0], pv[4]*rocky_radius_density(radius), nan)
-    models['water'][0] = where((radius >= pv[0]) & (radius <= pv[3]), pv[5]*rocky_radius_density(radius), nan)
-    models['water'][1] = where((radius >= pv[1]) & (radius <= pv[2]), pv[5]*rocky_radius_density(radius), nan)
-    models['puffy'][0] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[13], nan)
-    models['puffy'][1] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[13], nan)
-    return radius, models
+    x = linspace(dmin, dmax, npt)
+    models = {'rocky': zeros((2, npt)), 'water': zeros((2, npt)),
+              'puffy1': zeros((2, npt)), 'puffy2': zeros((2, npt))}
+    models['rocky'][0] = where(x < pv[1], pv[6]*rocky_radius_density(x), nan)
+    models['rocky'][1] = where(x < pv[0], pv[6]*rocky_radius_density(x), nan)
+    models['water'][0] = where((x >= pv[0]) & (x <= pv[3]), pv[7]*rocky_radius_density(x), nan)
+    models['water'][1] = where((x >= pv[1]) & (x <= pv[2]), pv[7]*rocky_radius_density(x), nan)
+    models['puffy1'][0] = where(x > pv[2], pv[8] + (x - 2.2) * pv[18], nan)
+    models['puffy1'][1] = where(x > pv[3], pv[8] + (x - 2.2) * pv[18], nan)
+    models['puffy2'][0] = where(x > pv[0], pv[9] + (x - 2.2) * pv[19], nan)
+    models['puffy2'][1] = where(x > pv[1], pv[9] + (x - 2.2) * pv[19], nan)
+    return x, models
 
 
 def plot_model_means(pv: ndarray, plot_widths: bool = True, plot_ref_rocky: bool = False,

@@ -10,7 +10,7 @@ from .model import model, lnlikelihood_vp
 def map_pv(pv):
     pv = atleast_2d(pv)
     pv_mapped = pv.copy()
-    pv_mapped[:, 8:16] = 10 ** pv[:, 8:16]
+    pv_mapped[:, 10:18] = 10 ** pv[:, 10:18]
     return pv_mapped
 
 
@@ -43,8 +43,10 @@ class LPF(LogPosteriorFunction):
     def _init_parameters(self):
         self.ps = PS([GP('rrw1',   'rocky-water transition start',   'R_earth',   NP( 1.5, 0.3), ( 0.0, inf)),
                      GP('rrw2',    'rocky-water transition end',     'R_earth',   NP( 1.8, 0.3), ( 0.0, inf)),
-                     GP('rwp1',    'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
-                     GP('rwp2',    'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
+                     GP('rwp11',   'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
+                     GP('rwp12',   'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
+                     GP('rwp21',   'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
+                     GP('rwp22',   'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
                      GP('meanr',   'RP density pdf mean',            'rho_rocky', NP( 0.9, 0.2), ( 0.0, inf)),
                      GP('meanw',   'WW density pdf mean',            'rho_rocky', NP( 0.4, 0.2), ( 0.0, inf)),
                      GP('meanp1',  'SN density pdf mean',            'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
