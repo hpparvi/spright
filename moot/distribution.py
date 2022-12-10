@@ -12,6 +12,19 @@ np.seterr(invalid='ignore')
 
 
 class Distribution:
+    """Mass or density distribution.
+
+
+    Attributes
+    ----------
+    quantity: {'density', 'mass'}
+        Stored quantity
+    samples: ndarray
+        Array of samples
+    size: int
+        Number of samples
+
+    """
     def __init__(self, samples: ndarray, quantity: str, modes: tuple[float, Optional[float]], fit: bool = True):
         self.quantity: str = quantity
         self.samples: ndarray = samples
