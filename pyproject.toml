@@ -1,6 +1,6 @@
 [project]
 name = "moot"
-version = "0.6.0"
+version = "22.12.10"
 description = 'Radius-mass relation for small planets orbiting M dwarfs.'
 authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
 classifiers=[
