@@ -5,14 +5,59 @@ from math import gamma
 from matplotlib.pyplot import subplots
 from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan
+    nan, floor, nanmedian, atleast_2d
 from numpy.random import normal, uniform
-from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import RegularGridInterpolator, interp1d
 
+from .core import read_mr
 
 @njit
 def lerp(x, a, b):
     return clip((x - a)/(b - a), 0.0, 1.0)
+
+
+@njit
+def bilerp_s(r, c, r0, dr, c0, dc, data):
+    nr = (r - r0) / dr
+    ir = int(floor(nr))
+    ar1 = nr - ir
+    ar2 = 1.0 - ar1
+
+    nc = (c - c0) / dc
+    ic = int(floor(nc))
+    ac1 = nc - ic
+    ac2 = 1.0 - ac1
+
+    if ic < 0 or ir < 0 or ic >= data.shape[0] - 1 or ir >= data.shape[1] - 1:
+        return nan
+
+    l00 = data[ic, ir]
+    l01 = data[ic, ir + 1]
+    l10 = data[ic + 1, ir]
+    l11 = data[ic + 1, ir + 1]
+
+    return (l00 * ac2 * ar2
+            + l10 * ac1 * ar2
+            + l01 * ac2 * ar1
+            + l11 * ac1 * ar1)
+
+
+@njit
+def bilerp_vr(r, c, r0, dr, c0, dc, data):
+    npt = r.size
+    d = zeros(npt)
+    for i in range(npt):
+        d[i] = bilerp_s(r[i], c, r0, dr, c0, dc, data)
+    return d
+
+
+@njit
+def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
+    npt = r.size
+    d = zeros(npt)
+    for i in range(npt):
+        d[i] = bilerp_s(r[i], c[i], r0, dr, c0, dc, data)
+    return d
 
 
 @njit
@@ -22,84 +67,66 @@ def spdf(x, m, s, l):
 
 
 @njit
-def rocky_volume_density(v):
-    return 12.2 + 0.989*exp(0.110*v) - 7.66*exp(-0.0722*v) - 0.704*v**(-0.414)
+def model(rho, radius, theta, component, r0, dr, drocky, dwater):
+    rwstart, rwend, wpstart, wpend = theta[0:4]
+    crocky, cwater, mpuffy = theta[4:7]
+    srocky, swater, spuffy = theta[7:10]
+    lrocky, lwater, lpuffy = theta[10:13]
+    drdrpuffy = theta[13]
 
+    x1 = lerp(radius, rwstart, rwend)
+    x2 = lerp(radius, wpstart, wpend)
 
-@njit
-def rocky_radius_density(r):
-    v = r**3
-    return 12.2 + 0.989*exp(0.110*v) - 7.66*exp(-0.0722*v) - 0.704*v**(-0.414)
+    mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
+    mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
+    mpuffy = mpuffy + (radius - 2.2)*drdrpuffy
 
-
-@njit
-def model(rho, radius, theta, component):
-    a1, a2, a3, a4, a5, a6 = theta[0:6]
-    m1, m2, m3, m4 = theta[6:10]
-    s1, s2, s3, s4 = theta[10:14]
-    l1, l2, l3, l4 = theta[14:18]
-    dr1, dr2 = theta[18:20]
-    alpha = theta[20]
-
-    r = rocky_radius_density(radius)
-
-    x1 = lerp(radius, a1, a2)
-    x2 = lerp(radius, a3, a4)
-    x3 = lerp(radius, a5, a6)
-    m3 = m3 + (radius - 2.2)*dr1
-    m4 = m4 + (radius - 2.2)*dr2
-
-    c1  = component[0] * (1.0 - x1) *        alpha              * spdf(rho, m1*r, s1, l1)
-    c2  = component[1] *        x1  *        alpha * (1.0 - x2) * spdf(rho, m2*r, s2, l2)
-    c3  = component[2] *        x1  *        alpha *        x2  * spdf(rho, m3, s3, l3)
-    c4  = component[3] * (1.0 - x3) * (1.0 - alpha)             * spdf(rho, m1*r, s1, l1)
-    c4 += component[3] *        x3  * (1.0 - alpha)             * spdf(rho, m4, s4, l4)
-
-    return c1 + c2 + c3 + c4
+    procky = component[0] * (1.0 - x1) *              spdf(rho, mrocky, srocky, lrocky)
+    pwater = component[1] *        x1  * (1.0 - x2) * spdf(rho, mwater, swater, lwater)
+    ppuffy = component[2] *        x1  *        x2  * spdf(rho, mpuffy, spuffy, lpuffy)
+    return where(isfinite(procky), procky, 1e-7) + where(isfinite(pwater), pwater, 1e-7) + ppuffy
 
 
 @njit(parallel=True)
-def average_model(samples, density, radius, components = None):
+def average_model(samples, density, radius, components, r0, dr, drocky, dwater):
     npv = samples.shape[0]
-    if components is None:
-        components = ones(4)
     t = zeros_like(density)
     for i in prange(npv):
-        t += model(density, radius, samples[i], components)
+        t += model(density, radius, samples[i], components, r0, dr, drocky, dwater)
     return t/npv
 
 
 @njit
-def lnlikelihood(theta, densities, radii):
-    lnl = log(model(densities, radii, theta, ones(4))).sum()
+def lnlikelihood(theta, densities, radii, r0, dr, drocky, dwater):
+    lnl = log(model(densities, radii, theta, ones(4), r0, dr, drocky, dwater)).sum()
     return lnl if isfinite(lnl) else inf
 
 
 @njit
-def lnlikelihood_v(pvp, densities, radii):
+def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
     npv = pvp.shape[0]
     lnl = zeros(npv)
-    cs = ones(4)
+    cs = ones(3)
     for i in range(npv):
-        lnl[i] = log(model(densities, radii, pvp[i], cs)).sum()
+        lnl[i] = log(model(densities, radii, pvp[i], cs, r0, dr, drocky, dwater)).sum()
         lnl[i] = lnl[i] if isfinite(lnl[i]) else inf
     return lnl
 
 
 @njit(parallel=True)
-def lnlikelihood_vp(pvp, densities, radii):
+def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
     npv = pvp.shape[0]
     ns = densities.shape[0]
     lnl = zeros(npv)
-    cs = ones(4)
+    cs = ones(3)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2] or pvp[i, 4] > pvp[i, 5]:
+        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
             for j in range(ns):
-                lnt[j] = log(model(densities[j], radii[j], pvp[i], cs)).sum()
+                lnt[j] = log(model(densities[j], radii[j], pvp[i], cs, r0, dr, drocky, dwater)).sum()
             maxl = max(lnt)
             lnl[i] = maxl + log(exp(lnt - maxl).mean())
     return lnl
@@ -119,22 +146,22 @@ def invert_cdf(values, cdf, res):
     return x, y
 
 
-def create_radius_density_map(pvs: ndarray,
+def create_radius_density_map(pvs: ndarray, r0, dr, drocky, dwater,
                               rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
                               rres: int = 200, dres: int = 100, components = None) -> (ndarray, ndarray, ndarray):
     radii = linspace(*rlims, num=rres)
     densities = linspace(*dlims, num=dres)
     dgrid, rgrid = meshgrid(densities, radii)
     if components is None:
-        components = ones(4)
-    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components=components).reshape(rgrid.shape)
+        components = ones(3)
+    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components, r0, dr, drocky, dwater).reshape(rgrid.shape)
     return radii, densities, m
 
 
-def create_radius_density_icdf(pvs: ndarray, pres: int = 100,
+def create_radius_density_icdf(pvs: ndarray, r0, dr, drocky, dwater, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
                                rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
-    radii, densities, rdmap = create_radius_density_map(pvs, rlims, dlims, rres, dres)
+    radii, densities, rdmap = create_radius_density_map(pvs, r0, dr, drocky, dwater, rlims, dlims, rres, dres)
     cdf = rdmap.cumsum(axis=1)
     cdf /= cdf[:, -1:]
     icdf = zeros((rres, pres))
@@ -162,27 +189,38 @@ def sample_mass(radius: tuple[float, float],
     samples = m_g.to(u.M_earth).value
     return samples[isfinite(samples)]
 
-def model_means(pv: ndarray, npt: int = 500, dmin: float = 0.5, dmax: float = 5.5):
-    x = linspace(dmin, dmax, npt)
-    models = {'rocky': zeros((2, npt)), 'water': zeros((2, npt)),
-              'puffy1': zeros((2, npt)), 'puffy2': zeros((2, npt))}
-    models['rocky'][0] = where(x < pv[1], pv[6]*rocky_radius_density(x), nan)
-    models['rocky'][1] = where(x < pv[0], pv[6]*rocky_radius_density(x), nan)
-    models['water'][0] = where((x >= pv[0]) & (x <= pv[3]), pv[7]*rocky_radius_density(x), nan)
-    models['water'][1] = where((x >= pv[1]) & (x <= pv[2]), pv[7]*rocky_radius_density(x), nan)
-    models['puffy1'][0] = where(x > pv[2], pv[8] + (x - 2.2) * pv[18], nan)
-    models['puffy1'][1] = where(x > pv[3], pv[8] + (x - 2.2) * pv[18], nan)
-    models['puffy2'][0] = where(x > pv[0], pv[9] + (x - 2.2) * pv[19], nan)
-    models['puffy2'][1] = where(x > pv[1], pv[9] + (x - 2.2) * pv[19], nan)
-    return x, models
+
+def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: float = 5.5, average: bool = True):
+    pvp = atleast_2d(pvp)
+    npv = pvp.shape[0]
+    radius = linspace(rmin, rmax, npt)
+    models = {'rocky': zeros((2, npv, npt)), 'water': zeros((2, npv, npt)), 'puffy': zeros((2, npv, npt))}
+    for i, pv in enumerate(pvp):
+        models['rocky'][0, i] = where(radius < pv[1], rdm.evaluate_rocky(pv[4], radius), nan)
+        models['rocky'][1, i] = where(radius < pv[0], rdm.evaluate_rocky(pv[4], radius), nan)
+        models['water'][0, i] = where((radius >= pv[0]) & (radius <= pv[3]), rdm.evaluate_water(pv[5], radius), nan)
+        models['water'][1, i] = where((radius >= pv[1]) & (radius <= pv[2]), rdm.evaluate_water(pv[5], radius), nan)
+        models['puffy'][0, i] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[13], nan)
+        models['puffy'][1, i] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[13], nan)
+
+    if average:
+        for k in models.keys():
+            tmp = zeros((2, npt))
+            for i in range(2):
+                m = isfinite(models[k][i]).mean(0) < 0.5
+                models[k][i, :, m] = nan
+                tmp[i] = nanmedian(models[k][i], 0)
+            models[k] = tmp
+
+    return radius, models
 
 
-def plot_model_means(pv: ndarray, plot_widths: bool = True, plot_ref_rocky: bool = False,
+def plot_model_means(pv: ndarray, rdm, plot_widths: bool = True,
                      npt: int = 500, dmin: float = 0.5, dmax: float = 5.5, ax=None):
     if ax is None:
         fig, ax = subplots()
 
-    radius, models = model_means(pv, npt=npt, dmin=dmin, dmax=dmax)
+    radius, models = model_means(pv, rdm, npt=npt, dmin=dmin, dmax=dmax)
 
     for j, (kind, model) in enumerate(models.items()):
         for i in range(2):
@@ -194,9 +232,5 @@ def plot_model_means(pv: ndarray, plot_widths: bool = True, plot_ref_rocky: bool
             ax.plot(radius, models['rocky'][0] + i * sr, alpha=0.2, ls='--', c='C0')
             ax.plot(radius, models['water'][0] + i * sw, alpha=0.2, ls='--', c='C1')
             ax.plot(radius, models['puffy'][0] + i * sp, alpha=0.2, ls='--', c='C2')
-
-    if plot_ref_rocky:
-        rd = rocky_radius_density(radius)
-        ax.plot(radius, where(rd < 15, rd, nan), 'k', alpha=0.2)
 
     return ax

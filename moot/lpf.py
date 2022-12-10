@@ -1,72 +1,66 @@
-import astropy.units as u
-from numpy import diag, inf, pi, atleast_2d, zeros, squeeze,  ndarray
-from numpy.random import multivariate_normal
+#  MOOT
+#  Copyright (C) 2022 Hannu Parviainen.
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+from numpy import inf, atleast_2d, squeeze, ndarray
 from pytransit.lpf.logposteriorfunction import LogPosteriorFunction
 from pytransit.param import ParameterSet as PS, GParameter as GP, NormalPrior as NP, UniformPrior as UP
 
 from .model import model, lnlikelihood_vp
+from .rdmodel import RadiusDensityModel
 
 
 def map_pv(pv):
     pv = atleast_2d(pv)
     pv_mapped = pv.copy()
-    pv_mapped[:, 10:18] = 10 ** pv[:, 10:18]
+    pv_mapped[:, 7:13] = 10 ** pv[:, 7:13]
     return pv_mapped
 
 
 class LPF(LogPosteriorFunction):
-    def __init__(self, r: ndarray, re: ndarray, mass: ndarray, masse: ndarray, nsamples: int = 50):
-        super().__init__('lpf')
+    def __init__(self, radius_samples: ndarray, density_samples: ndarray, rdm: RadiusDensityModel):
+        super().__init__('RadiusDensityLPF')
         self._init_parameters()
-
-        self._model_dim = len(self.ps)
-        self._radm, self._rade = r, re
-        self._massm, self._masse = mass, masse
-
-        self.nplanets = self._radm.size
-        self.nsamples: int = 0
-        self.radius_samples = None
-        self.density_samples = None
-        self.create_samples(nsamples)
-
-    def create_samples(self, nsamples: int):
-        self.nsamples = nsamples
-        samples = zeros((nsamples, self.nplanets, 2))
-        for i in range(self.nplanets):
-            samples[:, i, :] = multivariate_normal([self._radm[i], self._massm[i]],
-                                                         diag([self._rade[i]**2, self._masse[i]**2]),
-                                                         size=nsamples)
-        self.radius_samples = r = samples[:, :, 0].copy()
-        self.mass_samples =  m = samples[:, :, 1].copy()
-        self.density_samples = ((m * u.M_earth) / (4/3*pi*(r * u.R_earth)**3)).to(u.g/u.cm**3).value
+        self._ndim: int = len(self.ps)
+        self.nsamples: int = radius_samples.shape[0]
+        self.nplanets: int = radius_samples.shape[1]
+        self.radius_samples: ndarray = radius_samples
+        self.density_samples: ndarray = density_samples
+        self.rdm = rdm
 
     def _init_parameters(self):
         self.ps = PS([GP('rrw1',   'rocky-water transition start',   'R_earth',   NP( 1.5, 0.3), ( 0.0, inf)),
                      GP('rrw2',    'rocky-water transition end',     'R_earth',   NP( 1.8, 0.3), ( 0.0, inf)),
-                     GP('rwp11',   'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
-                     GP('rwp12',   'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
-                     GP('rwp21',   'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
-                     GP('rwp22',   'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
-                     GP('meanr',   'RP density pdf mean',            'rho_rocky', NP( 0.9, 0.2), ( 0.0, inf)),
-                     GP('meanw',   'WW density pdf mean',            'rho_rocky', NP( 0.4, 0.2), ( 0.0, inf)),
-                     GP('meanp1',  'SN density pdf mean',            'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
-                     GP('meanp2',  'SN2 density pdf mean',           'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
+                     GP('rwp1',    'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
+                     GP('rwp2',    'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
+                     GP('cr',      'Rocky planet iron ratio',        'rho_rocky', UP( 0.0, 1.0), ( 0.0, 1.0)),
+                     GP('cw',      'Water world water ratio',        'rho_rocky', UP( 0.05, 1.0),( 0.0, 1.0)),
+                     GP('ip',      'Sub-Neptune density intercept',  'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
                      GP('scaler',  'RP density pdf scale',           'rho_rocky', NP( 0.0, 0.6), (-inf, inf)),
                      GP('scalew',  'WW density pdf scale',           'rho_rocky', NP( 0.0, 0.3), (-inf, inf)),
-                     GP('scalep1', 'SN1 density pdf scal',           'gcm^3',     NP( 0.0, 0.6), (-inf, inf)),
-                     GP('scalep2', 'SN2 density pdf scale',          'gcm^3',     NP( 0.0, 0.6), (-inf, inf)),
+                     GP('scalep',  'SN density pdf scal',            'gcm^3',     NP( 0.0, 0.6), (-inf, inf)),
                      GP('dofr',    'RP density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
                      GP('dofw',    'WW density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
-                     GP('dofp1',   'SN1 density pdf dof',            '',          NP( 0.0, 0.5), (-inf, inf)),
-                     GP('dofp2',   'SN2 density pdf dof',            '',          NP( 0.0, 0.5), (-inf, inf)),
-                     GP('dddrp1',  'SN1 density slope',              'drho/drad', NP( 0.0, 1.0), (-inf, inf)),
-                     GP('dddrp2',  'SN2 density slope',              'drho/drad', NP( 0.0, 1.0), (-inf, inf)),
-                     GP('pwater',  'Water world population prob.',   '',          UP( 0.0, 1.0), (0.0, 1.0))])
+                     GP('dofp',    'SN density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
+                     GP('dddrp',   'SN density slope',               'drho/drad', NP( 0.0, 1.0), (-inf, inf))])
         self.ps.freeze()
 
-    @staticmethod
-    def model(rho, radius, pv, component):
-        return model(rho, radius, squeeze(map_pv(pv)), component)
+    def model(self, rho, radius, pv, component):
+        return model(rho, radius, squeeze(map_pv(pv)), component,
+                     self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
 
     def lnlikelihood(self, pv):
-        return lnlikelihood_vp(map_pv(pv), self.density_samples, self.radius_samples)
+        return lnlikelihood_vp(map_pv(pv), self.density_samples, self.radius_samples,
+                               self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
