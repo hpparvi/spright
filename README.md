@@ -1,2 +1,2 @@
-# MmmBop
-Mass-radius relation for small planets around M dwarfs
+# Moot
+Fast Bayesian radius-density-mass relation for small planets orbiting M dwarfs.
