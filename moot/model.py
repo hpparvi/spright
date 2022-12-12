@@ -5,11 +5,32 @@ from math import gamma
 from matplotlib.pyplot import subplots
 from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan, floor, nanmedian, atleast_2d
-from numpy.random import normal, uniform
+    nan, floor, nanmedian, atleast_2d, mean
+from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
 from .core import read_mr
+
+def weights_full(x, y, x1, x2, x3, y1, y2, y3):
+    w1 = ((y2-y3)*(x - x3) + (x3-x2)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
+    w2 = ((y3-y1)*(x - x3) + (x1-x3)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
+    w3 = 1. - w1 - w2
+    return w1, w2, w3
+
+@njit
+def map_r_to_xy(r, a1, a2, b1, b2):
+    """Maps the planet radius to the mixture triangle (x,y) coordinates."""
+    x = clip((r-b1)/(b2-b1), 0.0, 1.0)
+    y = clip(clip((r-a1)/(a2-a1), 0.0, 1.0) - x, 0.0, 1.0)
+    return x, y
+
+@njit
+def mixture_weights(x, y):
+    """Calculates the mixture weights using interpolation inside a triangle."""
+    w1 = 1. - x - y
+    w2 = y
+    w3 = 1. - w1 - w2
+    return w1, w2, w3
 
 @njit
 def lerp(x, a, b):
@@ -74,16 +95,16 @@ def model(rho, radius, theta, component, r0, dr, drocky, dwater):
     lrocky, lwater, lpuffy = theta[10:13]
     drdrpuffy = theta[13]
 
-    x1 = lerp(radius, rwstart, rwend)
-    x2 = lerp(radius, wpstart, wpend)
-
     mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
     mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
     mpuffy = mpuffy + (radius - 2.2)*drdrpuffy
 
-    procky = component[0] * (1.0 - x1) *              spdf(rho, mrocky, srocky, lrocky)
-    pwater = component[1] *        x1  * (1.0 - x2) * spdf(rho, mwater, swater, lwater)
-    ppuffy = component[2] *        x1  *        x2  * spdf(rho, mpuffy, spuffy, lpuffy)
+    tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
+    w1, w2, w3 = mixture_weights(tx, ty)
+
+    procky = component[0] * w1 * spdf(rho, mrocky, srocky, lrocky)
+    pwater = component[1] * w2 * spdf(rho, mwater, swater, lwater)
+    ppuffy = component[2] * w3 * spdf(rho, mpuffy, spuffy, lpuffy)
     return where(isfinite(procky), procky, 1e-7) + where(isfinite(pwater), pwater, 1e-7) + ppuffy
 
 
@@ -121,7 +142,7 @@ def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
     cs = ones(3)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 1] > pvp[i, 2]:
+        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
@@ -215,7 +236,33 @@ def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: floa
     return radius, models
 
 
-def plot_model_means(pv: ndarray, rdm, plot_widths: bool = True,
+def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin: float = 0.5, dmax: float = 4.0):
+    if ax is None:
+        fig, ax = subplots()
+
+    r = linspace(dmin, dmax, res)
+    weights = zeros((ns, 3, r.size))
+    models = zeros((ns, 3, r.size))
+    for i, j in enumerate(permutation(samples.shape[0])[:ns]):
+        d = samples.iloc[j]
+        weights[i] = mixture_weights(*map_r_to_xy(r, d.rrw1, d.rrw2, d.rwp1, d.rwp2))
+        models[i, 0] = rdm.evaluate_rocky(d.cr, r)
+        models[i, 1] = rdm.evaluate_water(d.cw, r)
+        models[i, 2] = d.ip + (r - 2.2)*d.dddrp
+    models = mean(models, 0)
+    weights = weights.mean(0)
+
+    lims = 0.70, 0.40, 0.1
+    fmts = 'k-', 'k--', 'k:'
+    lws = 2, 1, 1
+
+    for i in range(3):
+        for l, f, lw in zip(lims, fmts, lws):
+            ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw)
+    return ax
+
+
+def plot_model_means_old(pv: ndarray, rdm, plot_widths: bool = True,
                      npt: int = 500, dmin: float = 0.5, dmax: float = 5.5, ax=None):
     if ax is None:
         fig, ax = subplots()
