@@ -25,7 +25,7 @@ from .rdmodel import RadiusDensityModel
 def map_pv(pv):
     pv = atleast_2d(pv)
     pv_mapped = pv.copy()
-    pv_mapped[:, 7:13] = 10 ** pv[:, 7:13]
+    pv_mapped[:, 7:10] = 10 ** pv[:, 7:10]
     return pv_mapped
 
 
@@ -48,12 +48,12 @@ class LPF(LogPosteriorFunction):
                      GP('cr',      'Rocky planet iron ratio',        'rho_rocky', UP( 0.0, 1.0), ( 0.0, 1.0)),
                      GP('cw',      'Water world water ratio',        'rho_rocky', UP( 0.05, 1.0),( 0.0, 1.0)),
                      GP('ip',      'Sub-Neptune density intercept',  'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
-                     GP('scaler',  'RP density pdf scale',           'rho_rocky', NP( 0.0, 0.6), (-inf, inf)),
-                     GP('scalew',  'WW density pdf scale',           'rho_rocky', NP( 0.0, 0.3), (-inf, inf)),
-                     GP('scalep',  'SN density pdf scal',            'gcm^3',     NP( 0.0, 0.6), (-inf, inf)),
-                     GP('dofr',    'RP density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
-                     GP('dofw',    'WW density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
-                     GP('dofp',    'SN density pdf dof',             '',          NP( 0.0, 0.5), (-inf, inf)),
+                     GP('scaler',  'log10 RP density pdf scale',           '',          NP( 0.0, 0.6), (-inf, inf)),
+                     GP('scalew',  'log10 WW density pdf scale',           '',          NP( 0.0, 0.3), (-inf, inf)),
+                     GP('scalep',  'log10 SN density pdf scale',           '',          NP( 0.0, 0.6), (-inf, inf)),
+                     GP('dofr',    'RP density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
+                     GP('dofw',    'WW density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
+                     GP('dofp',    'SN density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
                      GP('dddrp',   'SN density slope',               'drho/drad', NP( 0.0, 1.0), (-inf, inf))])
         self.ps.freeze()
 

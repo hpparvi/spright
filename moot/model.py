@@ -83,7 +83,7 @@ def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
 
 @njit
 def spdf(x, m, s, l):
-    """Student's distribution PDF"""
+    """Non-standardized Student's t-distribution PDF"""
     return gamma(0.5*(l + 1))/(sqrt(l*pi)*s*gamma(l/2))*(1 + ((x - m)/s)**2/l)**(-0.5*(l + 1))
 
 
