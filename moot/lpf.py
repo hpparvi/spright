@@ -25,7 +25,7 @@ from .rdmodel import RadiusDensityModel
 def map_pv(pv):
     pv = atleast_2d(pv)
     pv_mapped = pv.copy()
-    pv_mapped[:, 7:10] = 10 ** pv[:, 7:10]
+    pv_mapped[:, 8:] = 10 ** pv[:, 8:]
     return pv_mapped
 
 
@@ -41,20 +41,17 @@ class LPF(LogPosteriorFunction):
         self.rdm = rdm
 
     def _init_parameters(self):
-        self.ps = PS([GP('rrw1',   'rocky-water transition start',   'R_earth',   NP( 1.5, 0.3), ( 0.0, inf)),
-                     GP('rrw2',    'rocky-water transition end',     'R_earth',   NP( 1.8, 0.3), ( 0.0, inf)),
-                     GP('rwp1',    'water-puffy transition start',   'R_earth',   NP( 2.0, 0.3), ( 0.0, inf)),
-                     GP('rwp2',    'water-puffy transition end',     'R_earth',   NP( 2.4, 0.3), ( 0.0, inf)),
-                     GP('cr',      'Rocky planet iron ratio',        'rho_rocky', UP( 0.0, 1.0), ( 0.0, 1.0)),
-                     GP('cw',      'Water world water ratio',        'rho_rocky', UP( 0.05, 1.0),( 0.0, 1.0)),
-                     GP('ip',      'Sub-Neptune density intercept',  'gcm^3',     NP( 2.0, 1.5), ( 0.0, inf)),
-                     GP('scaler',  'log10 RP density pdf scale',           '',          NP( 0.0, 0.6), (-inf, inf)),
-                     GP('scalew',  'log10 WW density pdf scale',           '',          NP( 0.0, 0.3), (-inf, inf)),
-                     GP('scalep',  'log10 SN density pdf scale',           '',          NP( 0.0, 0.6), (-inf, inf)),
-                     GP('dofr',    'RP density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
-                     GP('dofw',    'WW density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
-                     GP('dofp',    'SN density pdf dof',             '',          NP( 5.0, 0.001), (-inf, inf)),
-                     GP('dddrp',   'SN density slope',               'drho/drad', NP( 0.0, 1.0), (-inf, inf))])
+        self.ps = PS([GP('rrw1',     'rocky-water transition start',   'R_earth',   UP( 1.0, 2.0), ( 0.0, inf)),
+                      GP('rrw2',     'rocky-water transition end',     'R_earth',   UP( 1.4, 2.6), ( 0.0, inf)),
+                      GP('rwp1',     'water-puffy transition start',   'R_earth',   UP( 1.0, 2.5), ( 0.0, inf)),
+                      GP('rwp2',     'water-puffy transition end',     'R_earth',   UP( 1.4, 3.0), ( 0.0, inf)),
+                      GP('cr',       'rocky planet iron ratio',        '',          UP( 0.0, 1.0), ( 0.0, 1.0)),
+                      GP('cw',       'water world water ratio',        '',          NP( 0.5, 0.1),( 0.0, 1.0)),
+                      GP('ip',       'sub-Neptune density intercept',  'gcm^3',      NP( 2.0, 1.5), ( 0.0, inf)),
+                      GP('sp',       'sub-Neptune density slope',      'drho/drad',    NP(0.0, 1.0), (-inf, inf)),
+                      GP('log10_sr', 'log10 RP density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf)),
+                      GP('log10_sw', 'log10 WW density pdf scale',         '',    NP( 0.0, 0.3), (-inf, inf)),
+                      GP('log10_sp', 'log10 SN density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf))])
         self.ps.freeze()
 
     def model(self, rho, radius, pv, component):

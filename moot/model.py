@@ -11,6 +11,13 @@ from scipy.interpolate import RegularGridInterpolator, interp1d
 
 from .core import read_mr
 
+
+@njit
+def spdf(x, m, s, l):
+    """Non-standardized Student's t-distribution PDF"""
+    return gamma(0.5*(l + 1))/(sqrt(l*pi)*s*gamma(l/2))*(1 + ((x - m)/s)**2/l)**(-0.5*(l + 1))
+
+
 def weights_full(x, y, x1, x2, x3, y1, y2, y3):
     w1 = ((y2-y3)*(x - x3) + (x3-x2)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
     w2 = ((y3-y1)*(x - x3) + (x1-x3)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
@@ -31,6 +38,7 @@ def mixture_weights(x, y):
     w2 = y
     w3 = 1. - w1 - w2
     return w1, w2, w3
+
 
 @njit
 def lerp(x, a, b):
@@ -82,29 +90,21 @@ def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
 
 
 @njit
-def spdf(x, m, s, l):
-    """Non-standardized Student's t-distribution PDF"""
-    return gamma(0.5*(l + 1))/(sqrt(l*pi)*s*gamma(l/2))*(1 + ((x - m)/s)**2/l)**(-0.5*(l + 1))
-
-
-@njit
 def model(rho, radius, theta, component, r0, dr, drocky, dwater):
     rwstart, rwend, wpstart, wpend = theta[0:4]
-    crocky, cwater, mpuffy = theta[4:7]
-    srocky, swater, spuffy = theta[7:10]
-    lrocky, lwater, lpuffy = theta[10:13]
-    drdrpuffy = theta[13]
+    crocky, cwater, mpuffy, dpuffy = theta[4:8]
+    srocky, swater, spuffy = theta[8:]
 
     mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
     mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
-    mpuffy = mpuffy + (radius - 2.2)*drdrpuffy
+    mpuffy = mpuffy + (radius - 2.2)*dpuffy
 
     tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
     w1, w2, w3 = mixture_weights(tx, ty)
 
-    procky = component[0] * w1 * spdf(rho, mrocky, srocky, lrocky)
-    pwater = component[1] * w2 * spdf(rho, mwater, swater, lwater)
-    ppuffy = component[2] * w3 * spdf(rho, mpuffy, spuffy, lpuffy)
+    procky = component[0] * w1 * spdf(rho, mrocky, srocky, 5.0)
+    pwater = component[1] * w2 * spdf(rho, mwater, swater, 5.0)
+    ppuffy = component[2] * w3 * spdf(rho, mpuffy, spuffy, 5.0)
     return where(isfinite(procky), procky, 1e-7) + where(isfinite(pwater), pwater, 1e-7) + ppuffy
 
 
@@ -142,7 +142,7 @@ def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
     cs = ones(3)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3]:
+        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 0] > pvp[i, 2] or pvp[i, 1] > pvp[i, 3]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
@@ -221,8 +221,8 @@ def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: floa
         models['rocky'][1, i] = where(radius < pv[0], rdm.evaluate_rocky(pv[4], radius), nan)
         models['water'][0, i] = where((radius >= pv[0]) & (radius <= pv[3]), rdm.evaluate_water(pv[5], radius), nan)
         models['water'][1, i] = where((radius >= pv[1]) & (radius <= pv[2]), rdm.evaluate_water(pv[5], radius), nan)
-        models['puffy'][0, i] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[13], nan)
-        models['puffy'][1, i] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[13], nan)
+        models['puffy'][0, i] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[7], nan)
+        models['puffy'][1, i] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[7], nan)
 
     if average:
         for k in models.keys():
@@ -248,7 +248,7 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
         weights[i] = mixture_weights(*map_r_to_xy(r, d.rrw1, d.rrw2, d.rwp1, d.rwp2))
         models[i, 0] = rdm.evaluate_rocky(d.cr, r)
         models[i, 1] = rdm.evaluate_water(d.cw, r)
-        models[i, 2] = d.ip + (r - 2.2)*d.dddrp
+        models[i, 2] = d.ip + (r - 2.2)*d.sp
     models = mean(models, 0)
     weights = weights.mean(0)
 
@@ -259,25 +259,4 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
     for i in range(3):
         for l, f, lw in zip(lims, fmts, lws):
             ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw)
-    return ax
-
-
-def plot_model_means_old(pv: ndarray, rdm, plot_widths: bool = True,
-                     npt: int = 500, dmin: float = 0.5, dmax: float = 5.5, ax=None):
-    if ax is None:
-        fig, ax = subplots()
-
-    radius, models = model_means(pv, rdm, npt=npt, dmin=dmin, dmax=dmax)
-
-    for j, (kind, model) in enumerate(models.items()):
-        for i in range(2):
-            ax.plot(radius, model[i], c=f"C{j}", alpha=(0.3, 0.8)[i % 2], ls=('--', '-')[i % 2])
-
-    if plot_widths:
-        sr, sw, sp = 10 ** pv[7:10]
-        for i in (-1, 1):
-            ax.plot(radius, models['rocky'][0] + i * sr, alpha=0.2, ls='--', c='C0')
-            ax.plot(radius, models['water'][0] + i * sw, alpha=0.2, ls='--', c='C1')
-            ax.plot(radius, models['puffy'][0] + i * sp, alpha=0.2, ls='--', c='C2')
-
     return ax
