@@ -90,7 +90,7 @@ class RMRelation:
 
         rocky_density = c * self.rdm.evaluate_rocky(pv.cr, array([r]))[0]
         water_density = c * self.rdm.evaluate_water(pv.cw, array([r]))[0]
-        puffy_density = c * (pv.ip + (r - 2.2) * pv.dddrp)
+        puffy_density = c * (pv.ip + (r - 2.2) * pv.sp)
 
         if r <= rw_start:
             m1, m2 = rocky_density, None
