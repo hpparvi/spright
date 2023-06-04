@@ -5,7 +5,7 @@ from math import gamma
 from matplotlib.pyplot import subplots
 from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan, floor, nanmedian, atleast_2d, mean
+    nan, floor, nanmedian, atleast_2d, mean, newaxis
 from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
@@ -179,6 +179,21 @@ def create_radius_density_map(pvs: ndarray, r0, dr, drocky, dwater,
     return radii, densities, m
 
 
+def create_radius_mass_map(pvs: ndarray, r0, dr, drocky, dwater,
+                           rlims: tuple[float, float] = (0.5, 6.0), mlims: tuple[float, float] = (0, 24),
+                           rres: int = 200, mres: int = 100, components=None) -> (ndarray, ndarray, ndarray):
+    radii = linspace(*rlims, num=rres)
+    masses = linspace(*mlims, num=mres)
+    mgrid, rgrid = meshgrid(masses, radii)
+    volumes = (4 / 3 * pi * (radii * u.R_earth).to(u.cm) ** 3).value
+    dgrid = (mgrid * u.M_earth).to(u.g).value / volumes[:, newaxis]
+    c = ((1 * u.M_earth).to(u.g).value / (4 / 3 * pi * (radii * u.R_earth).to(u.cm) ** 3).value)
+    if components is None:
+        components = ones(3)
+    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components, r0, dr, drocky, dwater).reshape(rgrid.shape)
+    return radii, masses, c[:, newaxis]*m
+
+
 def create_radius_density_icdf(pvs: ndarray, r0, dr, drocky, dwater, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
                                rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
@@ -236,7 +251,7 @@ def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: floa
     return radius, models
 
 
-def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin: float = 0.5, dmax: float = 4.0):
+def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin: float = 0.5, dmax: float = 4.0, lwscale=1.0):
     if ax is None:
         fig, ax = subplots()
 
@@ -258,5 +273,5 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
 
     for i in range(3):
         for l, f, lw in zip(lims, fmts, lws):
-            ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw)
+            ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw*lwscale)
     return ax
