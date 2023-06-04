@@ -14,9 +14,10 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from numpy import inf, atleast_2d, squeeze, ndarray
+from numpy import inf, atleast_2d, squeeze, ndarray, clip
 from pytransit.lpf.logposteriorfunction import LogPosteriorFunction
 from pytransit.param import ParameterSet as PS, GParameter as GP, NormalPrior as NP, UniformPrior as UP
+from scipy.stats import beta
 
 from .model import model, lnlikelihood_vp
 from .rdmodel import RadiusDensityModel
@@ -40,11 +41,18 @@ class LPF(LogPosteriorFunction):
         self.density_samples: ndarray = density_samples
         self.rdm = rdm
 
+        p = beta(0.1, 0.1, loc=-1, scale=1.2)
+        def lnprior_water(pvp):
+            pvp = atleast_2d(pvp)
+            wpw = clip((pvp[:, 2] - pvp[:, 1]) / (pvp[:, 3] - pvp[:, 0]), -0.99, 0.19)
+            return p.logpdf(wpw)
+        self._additional_log_priors.append(lnprior_water)
+
     def _init_parameters(self):
         self.ps = PS([GP('rrw1',     'rocky-water transition start',   'R_earth',   UP( 1.0, 2.0), ( 0.0, inf)),
                       GP('rrw2',     'rocky-water transition end',     'R_earth',   UP( 1.4, 2.6), ( 0.0, inf)),
                       GP('rwp1',     'water-puffy transition start',   'R_earth',   UP( 1.0, 2.5), ( 0.0, inf)),
-                      GP('rwp2',     'water-puffy transition end',     'R_earth',   UP( 1.4, 3.0), ( 0.0, inf)),
+                      GP('rwp2',     'water-puffy transition end',     'R_earth',   UP( 1.4, 5.0), ( 0.0, inf)),
                       GP('cr',       'rocky planet iron ratio',        '',          UP( 0.0, 1.0), ( 0.0, 1.0)),
                       GP('cw',       'water world water ratio',        '',          NP( 0.5, 0.1),( 0.0, 1.0)),
                       GP('ip',       'sub-Neptune density intercept',  'gcm^3',      NP( 2.0, 1.5), ( 0.0, inf)),
