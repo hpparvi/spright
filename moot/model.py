@@ -97,7 +97,7 @@ def model(rho, radius, theta, component, r0, dr, drocky, dwater):
 
     mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
     mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
-    mpuffy = mpuffy + (radius - 2.2)*dpuffy
+    mpuffy = mpuffy * radius**dpuffy
 
     tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
     w1, w2, w3 = mixture_weights(tx, ty)
@@ -236,8 +236,8 @@ def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: floa
         models['rocky'][1, i] = where(radius < pv[0], rdm.evaluate_rocky(pv[4], radius), nan)
         models['water'][0, i] = where((radius >= pv[0]) & (radius <= pv[3]), rdm.evaluate_water(pv[5], radius), nan)
         models['water'][1, i] = where((radius >= pv[1]) & (radius <= pv[2]), rdm.evaluate_water(pv[5], radius), nan)
-        models['puffy'][0, i] = where(radius > pv[2], pv[6] + (radius - 2.2) * pv[7], nan)
-        models['puffy'][1, i] = where(radius > pv[3], pv[6] + (radius - 2.2) * pv[7], nan)
+        models['puffy'][0, i] = where(radius > pv[2], pv[6]*radius**pv[7], nan)
+        models['puffy'][1, i] = where(radius > pv[3], pv[6]*radius**pv[7], nan)
 
     if average:
         for k in models.keys():
@@ -263,7 +263,7 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
         weights[i] = mixture_weights(*map_r_to_xy(r, d.rrw1, d.rrw2, d.rwp1, d.rwp2))
         models[i, 0] = rdm.evaluate_rocky(d.cr, r)
         models[i, 1] = rdm.evaluate_water(d.cw, r)
-        models[i, 2] = d.ip + (r - 2.2)*d.sp
+        models[i, 2] = d.ip * r**d.sp
     models = mean(models, 0)
     weights = weights.mean(0)
 
