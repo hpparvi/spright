@@ -28,7 +28,7 @@ from scipy.optimize import minimize
 
 from .rdmodel import RadiusDensityModel
 from .version import version
-from .core import read_stpm, mearth, rearth
+from .core import mearth, rearth
 from .model import model, lnlikelihood_vp, create_radius_density_icdf
 from .lpf import LPF, map_pv
 
@@ -58,10 +58,7 @@ class RMEstimator:
         self.nplanets: int = 0
         self.nsamples: int = 0
 
-        if names is not None and radii is not None and (masses is not None or densities is not None):
-            self._init_data(names, radii, masses, densities)
-        else:
-            self._init_data_from_table(tbl_file, use_tabulated_rho, mask_bad)
+        self._init_data(names, radii, masses, densities)
         self._create_samples(nsamples)
 
         self.rdm = RadiusDensityModel()
@@ -74,25 +71,6 @@ class RMEstimator:
         self._ra = None
         self._da = None
         self._pa = None
-
-    def _init_data_from_table(self, catalog_name: Path, use_tabulated_rho: bool = False, mask_bad: bool = True):
-        df = read_stpm(catalog_name)
-        if mask_bad:
-            m = (df.eM_relative <= 0.25) & (df.eR_relative <= 0.08)
-        else:
-            m = ones(df.eM_relative.size, bool)
-        self.planet_names = df[m]['Star'].values + ' ' + df[m]['Planet'].values
-        self.radius_means = df[m].R_Rterra.values.copy()
-        self.radius_uncertainties =  df[['edR_Rterra', 'euR_Rterra']].mean(axis=1).values[m]
-        self.mass_means = df[m].M_Mterra.values.copy()
-        self.mass_uncertainties = df[['edM_Mterra', 'euM_Mterra']].mean(axis=1).values[m]
-        if use_tabulated_rho:
-            self.density_means = df[m]['rho_gcm-3'].values.copy()
-            self.density_uncertainties = df[['edrho_gcm-3', 'eurho_gcm-3']].mean(axis=1).values[m]
-        else:
-            self.density_means = None
-            self.density_uncertainties = None
-        self.nplanets = self.radius_means.size
 
     def _init_data(self, names: ndarray,
                    radii: tuple[ndarray, ndarray],
@@ -124,6 +102,9 @@ class RMEstimator:
             for i in range(self.nplanets):
                 self.density_samples[:, i] = normal(self.density_means[i], self.density_uncertainties[i], size=nsamples)
 
+    def add_lnprior(self, lnprior):
+        self.lpf._additional_log_priors.append(lnprior)
+
     def model(self, rho, radius, pv, components = None):
         return self.lpf.model(rho, radius, pv, ones(3) if components is None else components)
 
@@ -131,7 +112,7 @@ class RMEstimator:
         x0 = x0 or array([1.4, 1.8, 2.2, 2.5,   0.25, 0.75, 25,   -2.0,   -0.5, -0.5, -0.5])
         self._optimization_result = minimize(lambda x: -self.lpf.lnposterior(x), x0, method='Powell')
 
-    def sample_mcmc(self, niter: int = 500, thin: int = 5, repeats: int = 1, npop: int = 150, population=None):
+    def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, npop: int = 150, population=None):
         if population is None:
             if self.lpf.sampler is None:
                 population = multivariate_normal(self._optimization_result.x,
