@@ -13,7 +13,7 @@ classifiers=[
   "Programming Language :: Python",
 ]
 keywords = ['astronomy',  'astrophysics',  'exoplanets']
-dependencies = ["numpy", "numba", "scipy", "pandas", "astropy", "pytransit", "arviz", "corner", "metadata"]
+dependencies = ["numpy", "numba", "scipy", "pandas", "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee"]
 
 [project.urls]
 homepage = 'https://github.com/hpparvi/'
