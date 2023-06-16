@@ -17,17 +17,9 @@
 from numpy import inf, atleast_2d, squeeze, ndarray, clip
 from pytransit.lpf.logposteriorfunction import LogPosteriorFunction
 from pytransit.param import ParameterSet as PS, GParameter as GP, NormalPrior as NP, UniformPrior as UP
-from scipy.stats import beta
 
 from .model import model, lnlikelihood_vp
 from .rdmodel import RadiusDensityModel
-
-
-def map_pv(pv):
-    pv = atleast_2d(pv)
-    pv_mapped = pv.copy()
-    pv_mapped[:, 8:] = 10 ** pv[:, 8:]
-    return pv_mapped
 
 
 class LPF(LogPosteriorFunction):
@@ -42,23 +34,22 @@ class LPF(LogPosteriorFunction):
         self.rdm = rdm
 
     def _init_parameters(self):
-        self.ps = PS([GP('rrw1',     'rocky-water transition start',   'R_earth',   UP( 1.0, 2.0), ( 0.0, inf)),
-                      GP('rrw2',     'rocky-water transition end',     'R_earth',   UP( 1.4, 2.6), ( 0.0, inf)),
-                      GP('rwp1',     'water-puffy transition start',   'R_earth',   UP( 1.0, 2.5), ( 0.0, inf)),
-                      GP('rwp2',     'water-puffy transition end',     'R_earth',   UP( 1.4, 5.0), ( 0.0, inf)),
+        self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 1.0, 3.0), ( 0.0, inf)),
+                      GP('r4',       'puffy transition end',     'R_earth',   UP( 1.4, 5.0), ( 0.0, inf)),
+                      GP('ww',       'relative ww population width', '', UP(-1, 1), (-1.0, 1.0)),
+                      GP('wc',       'water world population center', 'R_earth', NP(1.8, 0.2), (0.0, inf)),
                       GP('cr',       'rocky planet iron ratio',        '',          UP( 0.0, 1.0), ( 0.0, 1.0)),
                       GP('cw',       'water world water ratio',        '',          NP( 0.5, 0.1),( 0.0, 1.0)),
-                      GP('ip',       'sub-Neptune density a',  'gcm^3',             UP( 0.5, 50.0), ( 0.0, inf)),
-                      GP('sp',       'sub-Neptune density b',      'drho/drad',    NP(0.0, 1.0), (-inf, inf)),
+                      GP('ip',       'SN density at r=2',  'gcm^3',            UP( 0.1, 7.0), ( 0.0, inf)),
+                      GP('sp',       'SN density exponent',      'drho/drad',    NP(-0.5, 1.5), (-inf, inf)),
                       GP('log10_sr', 'log10 RP density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf)),
                       GP('log10_sw', 'log10 WW density pdf scale',         '',    NP( 0.0, 0.3), (-inf, inf)),
                       GP('log10_sp', 'log10 SN density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf))])
         self.ps.freeze()
 
     def model(self, rho, radius, pv, component):
-        return model(rho, radius, squeeze(map_pv(pv)), component,
-                     self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
+        return model(rho, radius, pv, component, self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
 
     def lnlikelihood(self, pv):
-        return lnlikelihood_vp(map_pv(pv), self.density_samples, self.radius_samples,
+        return lnlikelihood_vp(pv, self.density_samples, self.radius_samples,
                                self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)

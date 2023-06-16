@@ -9,7 +9,16 @@ from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfini
 from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator, interp1d
 
-from .core import read_mr
+@njit
+def map_pv(pv):
+    pv_mapped = pv[:11].copy()
+    r1 = pv_mapped[0] = pv[0]
+    r4 = pv_mapped[3] = pv[1]
+    whw = 0.5*pv[2]*(r4-r1)
+    pv_mapped[1] = pv[3] - whw
+    pv_mapped[2] = pv[3] + whw
+    pv_mapped[8:11] = 10 ** pv[8:11]
+    return pv_mapped
 
 
 @njit
@@ -90,14 +99,15 @@ def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
 
 
 @njit
-def model(rho, radius, theta, component, r0, dr, drocky, dwater):
-    rwstart, rwend, wpstart, wpend = theta[0:4]
-    crocky, cwater, mpuffy, dpuffy = theta[4:8]
-    srocky, swater, spuffy = theta[8:]
+def model(rho, radius, pv, component, r0, dr, drocky, dwater):
+    pvm = map_pv(pv)
+    rwstart, rwend, wpstart, wpend = pvm[0:4]
+    crocky, cwater, mpuffy, dpuffy = pvm[4:8]
+    srocky, swater, spuffy = pvm[8:]
 
     mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
     mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
-    mpuffy = mpuffy * radius**dpuffy
+    mpuffy = mpuffy * radius**dpuffy / 2.0**dpuffy
 
     tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
     w1, w2, w3 = mixture_weights(tx, ty)
@@ -135,14 +145,33 @@ def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
 
 
 @njit(parallel=True)
+def lnlikelihood_sample(pv, densities, radii, r0, dr, drocky, dwater):
+    ns = densities.shape[0]
+    cs = ones(3)
+    lnt = zeros(ns)
+    if pv[0] > pv[1] or pv[2] > pv[3] or pv[0] > pv[2] or pv[1] > pv[3]:
+        return -inf
+    else:
+        lnt[:] = 0
+        for j in prange(ns):
+            lnt[j] = log(model(densities[j], radii[j], pv, cs, r0, dr, drocky, dwater)).sum()
+        maxl = max(lnt)
+        return maxl + log(exp(lnt - maxl).mean())
+
+
+@njit(parallel=True)
 def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
+    pvp = atleast_2d(pvp)
     npv = pvp.shape[0]
     ns = densities.shape[0]
     lnl = zeros(npv)
     cs = ones(3)
     for i in prange(npv):
         lnt = zeros(ns)
-        if pvp[i, 0] > pvp[i, 1] or pvp[i, 2] > pvp[i, 3] or pvp[i, 0] > pvp[i, 2] or pvp[i, 1] > pvp[i, 3]:
+        r1, r4 = pvp[i, 0], pvp[i, 1]
+        r2 = pvp[i, 3] - 0.5*pvp[i, 2]*(r4-r1)
+        r3 = pvp[i, 3] + 0.5*pvp[i, 2]*(r4-r1)
+        if r1 > r2 or r3 > r4 or r1 > r3 or r2 > r4:
             lnl[i] = -inf
         else:
             lnt[:] = 0
@@ -236,8 +265,8 @@ def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: floa
         models['rocky'][1, i] = where(radius < pv[0], rdm.evaluate_rocky(pv[4], radius), nan)
         models['water'][0, i] = where((radius >= pv[0]) & (radius <= pv[3]), rdm.evaluate_water(pv[5], radius), nan)
         models['water'][1, i] = where((radius >= pv[1]) & (radius <= pv[2]), rdm.evaluate_water(pv[5], radius), nan)
-        models['puffy'][0, i] = where(radius > pv[2], pv[6]*radius**pv[7], nan)
-        models['puffy'][1, i] = where(radius > pv[3], pv[6]*radius**pv[7], nan)
+        models['puffy'][0, i] = where(radius > pv[2], pv[6]*radius**pv[7] / 2.0**pv[7], nan)
+        models['puffy'][1, i] = where(radius > pv[3], pv[6]*radius**pv[7] / 2.0**pv[7], nan)
 
     if average:
         for k in models.keys():
@@ -260,10 +289,12 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
     models = zeros((ns, 3, r.size))
     for i, j in enumerate(permutation(samples.shape[0])[:ns]):
         d = samples.iloc[j]
-        weights[i] = mixture_weights(*map_r_to_xy(r, d.rrw1, d.rrw2, d.rwp1, d.rwp2))
+        r2 = d.wc - 0.5*d.ww*(d.r4-d.r1)
+        r3 = d.wc - 0.5*d.ww*(d.r4-d.r1)
+        weights[i] = mixture_weights(*map_r_to_xy(r, d.r1, r2, r3, d.r4))
         models[i, 0] = rdm.evaluate_rocky(d.cr, r)
         models[i, 1] = rdm.evaluate_water(d.cw, r)
-        models[i, 2] = d.ip * r**d.sp
+        models[i, 2] = d.ip * r**d.sp / 2**d.sp
     models = mean(models, 0)
     weights = weights.mean(0)
 

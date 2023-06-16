@@ -78,10 +78,10 @@ class RMRelation:
         ps = self.posterior_samples
         pv = ps.median()
 
-        rw_start = ps.rrw1.quantile(0.15)
-        rw_end = ps.rrw2.quantile(0.85)
-        wp_start = ps.rwp1.quantile(0.15)
-        wp_end = ps.rwp2.quantile(0.85)
+        rw_start = ps.r1.quantile(0.15)
+        rw_end = (ps.wc - 0.5*ps.ww*(ps.r4 - ps.r1)).quantile(0.85)
+        wp_start = (ps.wc + 0.5*ps.ww*(ps.r4 - ps.r1)).quantile(0.15)
+        wp_end = ps.r4.quantile(0.85)
 
         if quantity == 'density':
             c = 1.0
@@ -90,7 +90,7 @@ class RMRelation:
 
         rocky_density = c * self.rdm.evaluate_rocky(pv.cr, array([r]))[0]
         water_density = c * self.rdm.evaluate_water(pv.cw, array([r]))[0]
-        puffy_density = c * (pv.ip + (r - 2.2) * pv.sp)
+        puffy_density = c * (pv.ip * r**pv.sp / 2.0**pv.sp)
 
         if r <= rw_start:
             m1, m2 = rocky_density, None

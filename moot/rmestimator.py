@@ -30,7 +30,7 @@ from .rdmodel import RadiusDensityModel
 from .version import version
 from .core import mearth, rearth
 from .model import model, lnlikelihood_vp, create_radius_density_icdf
-from .lpf import LPF, map_pv
+from .lpf import LPF
 
 
 class RMEstimator:
@@ -109,7 +109,7 @@ class RMEstimator:
         return self.lpf.model(rho, radius, pv, ones(3) if components is None else components)
 
     def optimize(self, x0=None):
-        x0 = x0 or array([1.4, 1.8, 2.2, 2.5,   0.25, 0.75, 25,   -2.0,   -0.5, -0.5, -0.5])
+        x0 = x0 or array([1.4, 2.5, 0.0, 1.8,   0.25, 0.75, 2.5,   -2.0,   -0.5, -0.5, -0.5])
         self._optimization_result = minimize(lambda x: -self.lpf.lnposterior(x), x0, method='Powell')
 
     def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, npop: int = 150, population=None):
@@ -135,7 +135,7 @@ class RMEstimator:
         xi = permutation(df.shape[0])[:nsamples]
         self._posterior_sample = pvs = df.iloc[xi]
         rd = self.lpf.rdm
-        self._ra, self._da, self._pa, self.rdmap, self.icdf = create_radius_density_icdf(map_pv(pvs.values),
+        self._ra, self._da, self._pa, self.rdmap, self.icdf = create_radius_density_icdf(pvs.values,
                                                                                          rd._r0, rd._dr, rd.drocky, rd.dwater,
                                                                                          pres, rlims, dlims, rres, dres)
 
@@ -210,7 +210,6 @@ class RMEstimator:
             else:
                 raise ValueError('Need to give a parameter vector (population)')
 
-        pv = map_pv(pv)
         components = asarray(components) if components is not None else ones(4)
         pdf = zeros((rhores, radres, 3))
         rd = self.lpf.rdm
