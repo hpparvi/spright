@@ -1,7 +1,7 @@
 [project]
-name = "moot"
-version = "22.12.12"
-description = 'Radius-mass relation for small planets orbiting M dwarfs.'
+name = "spright"
+version = "23.06.16"
+description = 'Bayesian radius-density-mass relation for small planets.'
 authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
 classifiers=[
   "Topic :: Scientific/Engineering",
@@ -26,4 +26,4 @@ build-backend = "setuptools.build_meta"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ['moot', 'moot.data']
+include = ['spright', 'spright.data']
