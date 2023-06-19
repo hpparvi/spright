@@ -1,6 +1,6 @@
 [project]
 name = "spright"
-version = "23.06.16"
+version = "23.06.24"
 description = 'Bayesian radius-density-mass relation for small planets.'
 authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
 classifiers=[
@@ -16,7 +16,7 @@ keywords = ['astronomy',  'astrophysics',  'exoplanets']
 dependencies = ["numpy", "numba", "scipy", "pandas", "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee"]
 
 [project.urls]
-homepage = 'https://github.com/hpparvi/'
+homepage = 'https://github.com/hpparvi/spright'
 
 [build-system]
 requires = ["setuptools"]

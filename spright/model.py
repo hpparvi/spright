@@ -181,7 +181,7 @@ def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
             lnl[i] = maxl + log(exp(lnt - maxl).mean())
     return lnl
 
-
+@njit
 def invert_cdf(values, cdf, res):
     x = linspace(0, 1.0, res)
     y = zeros(res)
@@ -191,8 +191,11 @@ def invert_cdf(values, cdf, res):
     for j in range(res-2):
         while cdf[i] < x[j+1]:
             i += 1
-        a = (x[j+1] - cdf[i-1]) / (cdf[i] - cdf[i-1])
-        y[j+1] = (1-a)*values[i-1] + a*values[i]
+        if i > 0:
+            a = (x[j+1] - cdf[i-1]) / (cdf[i] - cdf[i-1])
+            y[j+1] = (1-a)*values[i-1] + a*values[i]
+        else:
+            y[j+1] = values[0]
     return x, y
 
 
