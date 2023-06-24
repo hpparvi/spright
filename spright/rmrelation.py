@@ -27,7 +27,7 @@ class RMRelation:
 
         self.rdm = RadiusDensityModel()
         if fname is None:
-            fname = Path(__file__).parent / 'data' / 'rdmap.fits'
+            fname = Path(__file__).parent / 'data' / 'stpm.fits'
         with pf.open(fname) as f:
             self.rd_posterior = f[0].data.copy()
             self.icdf = f[1].data.copy()
