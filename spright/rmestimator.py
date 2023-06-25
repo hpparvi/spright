@@ -29,7 +29,8 @@ from scipy.optimize import minimize
 from .rdmodel import RadiusDensityModel
 from .version import version
 from .core import mearth, rearth
-from .model import model, lnlikelihood_vp, create_radius_density_icdf
+from .model import model, create_radius_mass_map, create_radius_density_map
+from .relationmap import RMRelationMap, RDRelationMap
 from .lpf import LPF
 
 
@@ -38,7 +39,6 @@ class RMEstimator:
 
     """
     def __init__(self, nsamples: int = 50,
-                 tbl_file: Optional[Path] = None, use_tabulated_rho: bool = False, mask_bad: bool = True,
                  names: Optional[ndarray] = None,
                  radii: Optional[tuple[ndarray, ndarray]] = None,
                  masses: Optional[tuple[ndarray, ndarray]] = None,
@@ -61,16 +61,14 @@ class RMEstimator:
         self._init_data(names, radii, masses, densities)
         self._create_samples(nsamples)
 
-        self.rdm = RadiusDensityModel()
-        self.lpf = LPF(self.radius_samples, self.density_samples, self.rdm)
+        self.rdmodel = RadiusDensityModel()
+        self.lpf = LPF(self.radius_samples, self.density_samples, self.rdmodel)
 
-        self.rdmap: Optional[ndarray] = None
-        self.icdf: Optional[ndarray] = None
+        self.rdmap: Optional[RDRelationMap] = None
+        self.rmmap: Optional[RMRelationMap] = None
+
         self._optimization_result = None
         self._posterior_sample = None
-        self._ra = None
-        self._da = None
-        self._pa = None
 
     def _init_data(self, names: ndarray,
                    radii: tuple[ndarray, ndarray],
@@ -129,50 +127,67 @@ class RMEstimator:
                      rres: int = 200, dres: int = 100, pres: int = 100,
                      rlims: tuple[float, float] = (0.5, 6.0),
                      dlims: tuple[float, float] = (0, 12),
+                     mlims: tuple[float, float] = (0, 25),
                      rseed: int = 0):
         seed(rseed)
+        rd = self.rdmodel
         df = self.lpf.posterior_samples()
-        xi = permutation(df.shape[0])[:nsamples]
-        self._posterior_sample = pvs = df.iloc[xi]
-        rd = self.lpf.rdm
-        self._ra, self._da, self._pa, self.rdmap, self.icdf = create_radius_density_icdf(pvs.values,
-                                                                                         rd._r0, rd._dr, rd.drocky, rd.dwater,
-                                                                                         pres, rlims, dlims, rres, dres)
+        self._posterior_sample = pvs = df.iloc[permutation(df.shape[0])[:nsamples]]
+        radii, densities, rdm = create_radius_density_map(pvs.values, rd._r0, rd._dr, rd.drocky, rd.dwater,
+                                                          dres=dres, rres=rres, dlims=dlims, rlims=rlims)
+        radii, masses, rmm = create_radius_mass_map(pvs.values, rd._r0, rd._dr, rd.drocky, rd.dwater,
+                                                    mres=dres, rres=rres, mlims=mlims, rlims=rlims)
+        self.rdmap = RDRelationMap(rdm, radii, densities, pres)
+        self.rmmap = RMRelationMap(rmm, radii, masses, pres)
 
     def save(self, filename: Optional[Path] = None):
-        if self.lpf.sampler is None or self.rdmap is None or self.icdf is None:
-            raise ValueError("Cannot save before computing the idcf")
+        if self.lpf.sampler is None or self.rdmap is None:
+            raise ValueError("Cannot save before computing the maps")
 
-        rdh = pf.PrimaryHDU(self.rdmap)
-        ich = pf.ImageHDU(self.icdf, name='icdf')
+        rdh = pf.PrimaryHDU(self.rdmap.data)
+        rdc = pf.ImageHDU(self.rdmap.xy_cdf, name='rd_cdf')
+        rdi = pf.ImageHDU(self.rdmap.xy_icdf, name='rd_icdf')
+        drc = pf.ImageHDU(self.rdmap.yx_cdf, name='dr_cdf')
+        dri = pf.ImageHDU(self.rdmap.yx_icdf, name='dr_icdf')
+
+        rmr = pf.ImageHDU(self.rmmap.data, name='rmr')
+        rmc = pf.ImageHDU(self.rmmap.xy_cdf, name='rm_cdf')
+        rmi = pf.ImageHDU(self.rmmap.xy_icdf, name='rm_icdf')
+        mrc = pf.ImageHDU(self.rmmap.yx_cdf, name='mr_cdf')
+        mri = pf.ImageHDU(self.rmmap.yx_icdf, name='mr_icdf')
+
         smh = pf.BinTableHDU(Table.from_pandas(self._posterior_sample), name='samples')
 
-        d = self._da
-        r = self._ra
-        p = self._pa
+        d = self.rdmap.y
+        m = self.rmmap.y
+        r = self.rdmap.x
+        p = self.rdmap.probs
 
-        rdh.header['CTYPE1'] = 'density'
-        rdh.header['CRPIX1'] = 1
-        rdh.header['CRVAL1'] = d[0]
-        rdh.header['CDELT1'] = d[1] - d[0]
+        def set_axes(h, xname, yname, x, y):
+            h.header['CTYPE1'] = yname
+            h.header['CRPIX1'] = 1
+            h.header['CRVAL1'] = y[0]
+            h.header['CDELT1'] = y[1] - y[0]
 
-        rdh.header['CTYPE2'] = 'radius'
-        rdh.header['CRPIX2'] = 1
-        rdh.header['CRVAL2'] = r[0]
-        rdh.header['CDELT2'] = r[1] - r[0]
+            h.header['CTYPE2'] = xname
+            h.header['CRPIX2'] = 1
+            h.header['CRVAL2'] = x[0]
+            h.header['CDELT2'] = x[1] - x[0]
 
-        rdh.header['CREATOR'] = f'Moot v{str(version)} '
+        set_axes(rdh, 'radius', 'density', r, d)
+        set_axes(rdc, 'radius', 'density', r, d)
+        set_axes(rdi, 'radius', 'icdf', r, p)
+        set_axes(drc, 'density', 'radius', d, r)
+        set_axes(dri, 'density', 'icdf', d, p)
+
+        set_axes(rmr, 'radius', 'mass', r, d)
+        set_axes(rmc, 'radius', 'mass', r, d)
+        set_axes(rmi, 'radius', 'icdf', r, p)
+        set_axes(mrc, 'mass', 'radius', m, r)
+        set_axes(mri, 'mass', 'icdf', m, p)
+
+        rdh.header['CREATOR'] = f'Spright v{str(version)} '
         rdh.header['CREATED'] = Time.now().to_value('fits', 'date')
-
-        ich.header['CTYPE1'] = 'icdf'
-        ich.header['CRPIX1'] = 1
-        ich.header['CRVAL1'] = p[0]
-        ich.header['CDELT1'] = p[1] - p[0]
-
-        ich.header['CTYPE2'] = 'radius'
-        ich.header['CRPIX2'] = 1
-        ich.header['CRVAL2'] = r[0]
-        ich.header['CDELT2'] = r[1] - r[0]
 
         # Catalog
         tbs = Table(data=[self.planet_names.astype('a20'),
@@ -191,7 +206,7 @@ class RMEstimator:
                     units=['R_Earth', 'M_Earth', 'g cm^-3'])
         rms = pf.BinTableHDU(tbs, name='rmsamples')
 
-        hdul = pf.HDUList([rdh, ich, smh, cat, rms])
+        hdul = pf.HDUList([rdh, rdc, rdi, drc, dri, rmr, rmc, rmi, mrc, mri, smh, cat, rms])
         filename = filename or Path('rdmap.fits')
         hdul.writeto(filename, overwrite=True)
 
