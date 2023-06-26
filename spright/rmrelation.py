@@ -1,14 +1,17 @@
 from pathlib import Path
 from typing import Union, Optional
 
+import astropy.units as u
 import astropy.io.fits as pf
 import numpy as np
 from astropy.table import Table
-from numpy import arange, array, ndarray
+from numpy import arange, array, ndarray, pi
+from uncertainties import ufloat
 
 from .distribution import Distribution
 from .model import sample_density, sample_mass
 from .rdmodel import RadiusDensityModel
+from .relationmap import RDRelationMap, RMRelationMap
 
 np.seterr(invalid='ignore')
 
@@ -29,23 +32,22 @@ class RMRelation:
         if fname is None:
             fname = Path(__file__).parent / 'data' / 'stpm.fits'
         with pf.open(fname) as f:
-            self.rd_posterior = f[0].data.copy()
-            self.icdf = f[1].data.copy()
-            h0 = f[0].header
-            self.densities = h0['CRVAL1'] + arange(h0['NAXIS1']) * h0['CDELT1']
-            h1 = f[1].header
-            self.radii = h1['CRVAL2'] + arange(h1['NAXIS2']) * h1['CDELT2']
-            self.probs = h1['CRVAL1'] + arange(h1['NAXIS1']) * h1['CDELT1']
-            self.posterior_samples = Table.read(fname).to_pandas()
-            self.catalog = Table.read(fname, 3).to_pandas()
-            self.rdsamples = Table.read(fname, 4).to_pandas()
+            self.rdmap = RDRelationMap.load(fname)
+            self.rmmap = RMRelationMap.load(fname)
+            self.posterior_samples = Table.read(fname, 10).to_pandas()
+            self.catalog = Table.read(fname, 11).to_pandas()
+            self.rdsamples = Table.read(fname, 12).to_pandas()
 
-    def sample(self, quantity: str, radius: Union[float, tuple[float, float]], nsamples: int = 5000) -> ndarray:
+    def sample(self, quantity: str,
+               radius: Optional[Union[float, tuple[float, float]]] = None,
+               mass: Optional[Union[float, tuple[float, float], ufloat]] = None,
+               mstar: Optional[Union[float, tuple[float, float], ufloat]] = None,
+               nsamples: int = 5000) -> Distribution:
         """
 
         Parameters
         ----------
-        quantity: {'density', 'mass'}
+        quantity: {'radius', 'density', 'mass', 'k'}
             Returned quantity.
         radius
             Planet radius either as a single float or as a tuple with radius and its uncertainty.
@@ -57,15 +59,54 @@ class RMRelation:
         ndarray
             Samples from either the density or mass posterior given the planet radius.
         """
-        try:
-            r, re = radius
-        except TypeError:
-            r, re = radius, 1e-4
+        qs = ('radius', 'density', 'mass', 'k')
+        if quantity not in qs:
+            raise ValueError(f"Quantity has to be one of {qs}")
+
         if quantity == 'density':
-            s = sample_density((r, re), self.radii, self.probs, self.icdf, nsamples)
-        else:
-            s = sample_mass((r, re), self.radii, self.probs, self.icdf, nsamples)
-        return Distribution(s, quantity, self._identify_modes(r, quantity))
+            if radius is None:
+                raise ValueError("The planet radius should be given for density prediction.")
+            elif isinstance(radius, (tuple, list)):
+                r, re = radius
+            else:
+                r, re = radius, 1e-4
+            rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
+            return Distribution(s, quantity, self._identify_modes(r, quantity))
+
+        elif quantity == 'mass':
+            if radius is None:
+                raise ValueError("The planet radius should be given for mass prediction.")
+            elif isinstance(radius, (tuple, list)):
+                r, re = radius
+            else:
+                r, re = radius, 1e-4
+            rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
+            v = 4 / 3 * pi * (rs * u.R_earth).to(u.cm) ** 3
+            m_g = v * s * (u.g / u.cm ** 3)
+            return Distribution( m_g.to(u.M_earth).value, quantity, self._identify_modes(r, quantity))
+
+        elif quantity == 'k':
+            if radius is None or mstar is None:
+                raise ValueError("The planet radius and stellar mass should be given for RV semi-amplitude prediction.")
+            elif isinstance(radius, (tuple, list)):
+                r, re = radius
+            else:
+                r, re = radius, 1e-4
+            rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
+            v = 4 / 3 * pi * (rs * u.R_earth).to(u.cm) ** 3
+            m_g = v * s * (u.g / u.cm ** 3)
+            #TODO: Finish the K calculation
+            return Distribution( m_g.to(u.M_earth).value, quantity, self._identify_modes(r, quantity))
+
+        if quantity == 'radius':
+            if mass is None:
+                raise ValueError("The planet mass should be given for density prediction.")
+            elif isinstance(mass, (tuple, list)):
+                m, me = mass
+            else:
+                m, me = mass, 1e-4
+            ms, s = self.rmmap.sample((m, me), 'mr', nsamples)
+            return Distribution(s, quantity, self._identify_modes(m, quantity))
 
     def sample_density(self, r: float, re: float, nsamples: int = 5000):
         return sample_density((r, re), self.radii, self.probs, self.icdf, nsamples)

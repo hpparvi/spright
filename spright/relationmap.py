@@ -1,8 +1,10 @@
+import astropy.io.fits as pf
+
 from pathlib import Path
 from typing import Optional, Union
 
 from matplotlib.pyplot import subplots, setp
-from numpy import ndarray, zeros, isfinite
+from numpy import ndarray, zeros, isfinite, arange
 from numpy.random import normal, uniform
 from scipy.interpolate import RegularGridInterpolator
 
@@ -40,16 +42,15 @@ class RelationMap:
 
     @classmethod
     def load(cls, filename: Union[Path, str]):
-        # load data
-        pass
-        # return cls('x', 'y', data, x, y)
+        raise NotImplementedError
 
-    def init_data(self, data: ndarray, x: ndarray, y: ndarray,
+    def init_data(self, data: ndarray, x: ndarray, y: ndarray, probs: ndarray,
                   xy_cdf: Optional[ndarray] = None, xy_icdf: Optional[ndarray] = None,
                   yx_cdf: Optional[ndarray] = None, yx_icdf: Optional[ndarray] = None):
         self.data = data.copy()
         self.x = x.copy()
         self.y = y.copy()
+        self.probs = probs.copy()
         self.xres = x.size
         self.yres = y.size
         if xy_cdf is None:
@@ -81,7 +82,7 @@ class RelationMap:
         self.yx_icdf = icdf
         self.probs = probs
 
-    def sample(self, v: tuple[float, float], relation: str, nsamples: int = 20_000) -> ndarray:
+    def sample(self, v: tuple[float, float], relation: str, nsamples: int = 20_000) -> (ndarray, ndarray):
         if relation not in self.relations:
             raise ValueError(f"Relation needs to be on of {list(self.relations.keys())}")
         relation = self.relations[relation]
@@ -91,7 +92,15 @@ class RelationMap:
             rgi = RegularGridInterpolator((self.y, self.probs), self.yx_icdf, bounds_error=False)
         vs = normal(v[0], v[1], nsamples)
         samples = rgi((vs, uniform(size=nsamples)))
-        return samples[isfinite(samples)]
+        m = isfinite(samples)
+        return vs[m], samples[m]
+
+    def plot_map(self, ax=None):
+        if ax is None:
+            fig, ax = subplots()
+        ax.imshow(self.data.T, origin='lower', aspect='auto',
+                  extent=(self.x[0], self.x[-1], self.y[0], self.y[-1]))
+        setp(ax, xlabel=f"{self.xname} [{self.xunit}]", ylabel=f"{self.yname} [{self.yunit}]")
 
     def plot_cdf(self, relation: str = 'xy', ax=None):
         if relation not in self.relations:
@@ -129,10 +138,43 @@ class RelationMap:
 
 
 class RDRelationMap(RelationMap):
-    def __init__(self, data: ndarray, radii: ndarray, densities: ndarray, pres: int = 100):
+    def __init__(self, data: Optional[ndarray] = None, radii: Optional[ndarray] = None, densities: Optional[ndarray] = None, pres: int = 100):
         super().__init__('radius', 'density', data, radii, densities, xunit=r'R$_\oplus$', yunit=r'g/cm$^3$', pres=pres)
 
+    @classmethod
+    def load(cls, filename: Union[Path, str]):
+        with pf.open(filename) as f:
+            rdr = f[0].data.copy()
+            rdc = f['rd_cdf'].data.copy()
+            rdi = f['rd_icdf'].data.copy()
+            drc = f['dr_cdf'].data.copy()
+            dri = f['dr_icdf'].data.copy()
+            h = f[0].header
+            density = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
+            radius = h['CRVAL2'] + h['CDELT2']*arange(h['NAXIS2'])
+            h = f['rd_icdf'].header
+            prob = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
+        r = cls()
+        r.init_data(rdr, radius, density, prob, rdc, rdi, drc, dri)
+        return r
 
 class RMRelationMap(RelationMap):
-    def __init__(self, data: ndarray, radii: ndarray, masses: ndarray, pres: int = 100):
+    def __init__(self, data: Optional[ndarray] = None, radii: Optional[ndarray] = None, masses: Optional[ndarray] = None, pres: int = 100):
         super().__init__('radius', 'mass', data, radii, masses, xunit=r'R$_\oplus$', yunit=r'M$_\oplus$', pres=pres)
+
+    @classmethod
+    def load(cls, filename: Union[Path, str]):
+        with pf.open(filename) as f:
+            rmr = f['rmr'].data.copy()
+            rmc = f['rm_cdf'].data.copy()
+            rmi = f['rm_icdf'].data.copy()
+            mrc = f['mr_cdf'].data.copy()
+            mri = f['mr_icdf'].data.copy()
+            h = f['rmr'].header
+            mass = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
+            radius = h['CRVAL2'] + h['CDELT2']*arange(h['NAXIS2'])
+            h = f['rm_icdf'].header
+            prob = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
+        r = cls()
+        r.init_data(rmr, radius, mass, prob, rmc, rmi, mrc, mri)
+        return r

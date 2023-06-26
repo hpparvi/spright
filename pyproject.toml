@@ -13,7 +13,8 @@ classifiers=[
   "Programming Language :: Python",
 ]
 keywords = ['astronomy',  'astrophysics',  'exoplanets']
-dependencies = ["numpy", "numba", "scipy", "pandas", "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee"]
+dependencies = ["numpy", "numba", "scipy", "uncertainties", "pandas",
+  "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee"]
 
 [project.urls]
 homepage = 'https://github.com/hpparvi/spright'
