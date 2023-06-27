@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from matplotlib.pyplot import subplots, setp
-from numpy import ndarray, zeros, isfinite, arange
+from numpy import ndarray, zeros, isfinite, arange, linspace
 from numpy.random import normal, uniform
 from scipy.interpolate import RegularGridInterpolator
 
@@ -24,7 +24,7 @@ class RelationMap:
         self.relations = {'xy': 'xy', self.xname[0] + self.yname[0]: 'xy', 'yx': 'yx',
                           self.yname[0] + self.xname[0]: 'yx'}
         self.pres: int = pres
-        self.probs: Optional[ndarray] = None
+        self.probs: ndarray = linspace(0, 1, pres)
 
         self.xy_cdf: Optional[ndarray] = None
         self.xy_icdf: Optional[ndarray] = None
@@ -38,7 +38,7 @@ class RelationMap:
         self.yres: int = 0
 
         if data is not None:
-            self.init_data(data, x, y)
+            self.init_data(data, x, y, self.probs)
 
     @classmethod
     def load(cls, filename: Union[Path, str]):
