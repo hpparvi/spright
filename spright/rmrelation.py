@@ -96,7 +96,7 @@ class RMRelation:
         m_g = v * s * (u.g / u.cm ** 3)
         return Distribution(m_g.to(u.M_earth).value, 'mass', self._identify_modes(r, 'mass'))
 
-    def predict_rv_semiamplitude(self, radius: prq, period: prq, mstar: prq, ecc: oprq = None, nsamples: int = 5000) -> Distribution:
+    def predict_rv_semi_amplitude(self, radius: prq, period: prq, mstar: prq, ecc: oprq = None, nsamples: int = 5000) -> Distribution:
         """
 
         Parameters
