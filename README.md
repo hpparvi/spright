@@ -8,13 +8,28 @@ Spright (/spraɪt/) is a fast Bayesian radius-density-mass relation for small pl
 
 ## Usage
 
-### Planet mass estimation
+### Planet mass prediction
 
     from spright import RMRelation 
 
     rmr = RMRelation()
-    mds = rmr.sample('mass', (1.8, 0.05))
+    mds = rmr.predict_mass(radius=(1.8, 0.05))
     mds.plot()
+
+### RV semi-amplitude prediction
+
+The radial velocity semi-amplitude can be predicted given the planet's radius, orbital period, orbital eccentricity (optional),
+and the host star mass.
+
+    from spright import RMRelation 
+
+    rmr = RMRelation()
+    mds = rmr.predict_rv_semi_amplitude(radius=(1.8, 0.05), period=2.2, mstar=0.4)
+    mds.plot()
+
+Here the `RMRelation.predict_rv_semi_amplitude` can also be given the planet's orbital eccentricity (`ecc`), 
+and all the parameters (`radius`, `period`, `mstar`, and `ecc`) can either be floats, ufloats, or two-value tuples where the second value gives
+the parameter uncertainty.
 
 ### Calculation of a new radius-density-mass relation
 
@@ -25,3 +40,6 @@ Spright (/spraɪt/) is a fast Bayesian radius-density-mass relation for small pl
     rme.sample()
     rme.compute_maps()
     rme.save('map_name.fits')
+
+---
+&copy; 2023 Hannu Parviainen
