@@ -32,7 +32,7 @@ and the host star mass.
 
 ![Predicted RV semi-amplitude](notebooks/f02_rv_semi_amplitude.svg)
 
-Here the `RMRelation.predict_rv_semi_amplitude` can also be given the planet's orbital eccentricity (`ecc`), 
+Here the `RMRelation.predict_rv_semi_amplitude` method can also be given the planet's orbital eccentricity (`ecc`), 
 and all the parameters (`radius`, `period`, `mstar`, and `ecc`) can either be floats, ufloats, or two-value tuples where the second value gives
 the parameter uncertainty.
 
