@@ -79,6 +79,7 @@ class Distribution:
             return dmodel, res.x, res.x[1], res.x[4]
 
     def plot(self, plot_model: bool = True, plot_modes: bool = True, ax = None):
+        plot_model &= self.model is not None
         ps = percentile(self.samples, [50, 16, 84, 2.5, 97.5])
         x, y = self._fit_kde()
         il, iu = argmin(abs(x - ps[1])), argmin(abs(x - ps[2]))
@@ -95,14 +96,16 @@ class Distribution:
         ax.plot(x, y, 'k')
         if plot_model:
             ax.plot(x, self.model(x, self.model_pars), '--k')
-        if plot_modes:
-            ax.axvline(self._m1, c='k', ls='--')
-            if self._m2 is not None:
-                ax.axvline(self._m2, c='k', ls='--')
+            if plot_modes:
+                ax.axvline(self._m1, c='k', ls='--')
+                if self._m2 is not None:
+                    ax.axvline(self._m2, c='k', ls='--')
 
         xlabel = {'density': r'Density [g cm$^{-3}$]',
                   'relative density': r'Density [$\rho_{rocky}$]',
-                  'mass': r'Mass [M$_\oplus$]'}[self.quantity]
+                  'mass': r'Mass [M$_\oplus$]',
+                  'radius': r'Radius [R$_\oplus$]',
+                  'k': r'RV semi-amplitude [m/s]'}[self.quantity]
 
         setp(ax, ylabel='Posterior probability', xlabel=xlabel, yticks=[], xlim=percentile(self.samples, [1, 99]))
         if fig is not None:
