@@ -1,6 +1,8 @@
 # Spright
 
-Spright (/spraɪt/; Parviainen, Luque, and Palle, submitted to MNRAS) is a fast Bayesian radius-density-mass relation for small planets.
+Spright (/spraɪt/; Parviainen, Luque, and Palle, submitted to MNRAS) is a fast Bayesian radius-density-mass relation for 
+small planets. The package offers methods to predict planetary masses, densities, RV semi-amplitudes from an estimate of
+the planet's radius, or planetary radii given an estimate of the planet's mass.
 
 ![relation_maps](notebooks/f00_relation_maps.svg)
 
