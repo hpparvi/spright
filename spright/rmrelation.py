@@ -56,6 +56,47 @@ class RMRelation:
             self.catalog = Table.read(fname, 11).to_pandas()
             self.rdsamples = Table.read(fname, 12).to_pandas()
 
+
+    def sample(self, quantity: str, radius: oprq = None, mass: oprq = None,
+               mstar: oprq = None, period: oprq = None, ecc: oprq = None,
+               nsamples: int = 5000) -> Distribution:
+        """
+
+        Parameters
+        ----------
+        quantity: {'radius', 'density', 'mass', 'k'}
+            Returned quantity.
+        radius
+            Planet radius either as a single float or as a tuple with radius and its uncertainty.
+        mass
+            Planet mass either as a single float or as a tuple with radius and its uncertainty.
+        mstar
+            Stellar mass either as a single float or as a tuple with radius and its uncertainty.
+        period
+            Orbital period of the planet either as a single float or as a tuple with radius and its uncertainty.
+        ecc
+            Planet's orbital eccentricity either as a single float or as a tuple with radius and its uncertainty.
+        nsamples
+            Number of samples to return.
+
+        Returns
+        -------
+        ndarray
+            Samples from either the density or mass posterior given the planet radius.
+        """
+        qs = ('radius', 'density', 'mass', 'k')
+        if quantity not in qs:
+            raise ValueError(f"Quantity has to be one of {qs}")
+
+        if quantity == 'density':
+            return self.predict_density(radius, nsamples)
+        elif quantity == 'mass':
+            return self.predict_mass(radius, nsamples)
+        elif quantity == 'k':
+            return self.predict_rv_semi_amplitude(radius, period, mstar, ecc, nsamples)
+        if quantity == 'radius':
+            return self.predict_radius(mass, nsamples)
+
     def predict_density(self, radius: prq, nsamples: int = 5000) -> Distribution:
         """
 
