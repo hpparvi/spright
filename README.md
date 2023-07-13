@@ -9,11 +9,7 @@ of the planet's radius, or planetary radii given an estimate of the planet's mas
 The package contains two relations: one for small planets orbiting M dwarfs (inferred from a updated SPTM catalogue by
 R. Luque) and another for planets orbiting FGK stars (inferred from a filtered TepCAT catalogue). 
 
-### Mass prediction
-
 ![Mass prediction](notebooks/mass_prediction_example.svg)
-
-### Radius prediction
 
 ![Radius prediction](notebooks/radius_prediction_example.svg)
 
