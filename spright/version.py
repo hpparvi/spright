@@ -1,3 +1,3 @@
 from importlib import metadata
 
-version = metadata.version('moot')
+version = metadata.version('spright')
