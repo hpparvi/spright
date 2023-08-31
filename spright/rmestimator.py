@@ -67,8 +67,8 @@ class RMEstimator:
         self.rdmap: Optional[RDRelationMap] = None
         self.rmmap: Optional[RMRelationMap] = None
 
-        self._optimization_result = None
-        self._posterior_sample = None
+        self._optimization_result: ndarray | None = None
+        self._posterior_sample: ndarray | None = None
 
     def _init_data(self, names: ndarray,
                    radii: tuple[ndarray, ndarray],
@@ -106,19 +106,16 @@ class RMEstimator:
     def model(self, rho, radius, pv, components = None):
         return self.lpf.model(rho, radius, pv, ones(3) if components is None else components)
 
-    def optimize(self, x0=None):
-        x0 = x0 or array([1.4, 2.5, 0.0, 1.8,   0.25, 0.75, 2.5,   -2.0,   -0.5, -0.5, -0.5])
-        self._optimization_result = minimize(lambda x: -self.lpf.lnposterior(x), x0, method='Powell')
+    def optimize(self, niter: int = 500, npop: int = 150):
+        self.lpf.optimize_global(niter, npop, plot_convergence=False)
+        self._optimization_result = self.lpf.de.minimum_location.copy()
 
-    def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, npop: int = 150, population=None):
+    def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, population=None):
         if population is None:
-            if self.lpf.sampler is None:
-                population = multivariate_normal(self._optimization_result.x,
-                                                 diag(full(self.lpf._ndim, 1e-3)),
-                                                 size=npop)
-            else:
-                population = self.lpf.sampler.chain[:, -1, :].copy()
-        self.lpf.sample_mcmc(niter, thin, repeats, npop, population=population, save=False, vectorize=True)
+            population = self.lpf.de.population.copy()
+        else:
+            population = self.lpf.sampler.chain[:, -1, :].copy()
+        self.lpf.sample_mcmc(niter, thin, repeats, population.shape[0], population=population, save=False, vectorize=True)
 
     def posterior_samples(self, burn: int = 0, thin: int = 1):
         return self.lpf.posterior_samples(burn, thin)
@@ -221,7 +218,7 @@ class RMEstimator:
             if self.lpf.sampler is not None:
                 pv = self.lpf.sampler.chain[:, :, :].reshape([-1, self.lpf._ndim])
             elif self._optimization_result is not None:
-                pv = self._optimization_result.x
+                pv = self._optimization_result
             else:
                 raise ValueError('Need to give a parameter vector (population)')
 
