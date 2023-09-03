@@ -150,39 +150,34 @@ def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
 
 @njit(parallel=True)
 def lnlikelihood_sample(pv, densities, radii, r0, dr, drocky, dwater):
-    ns = densities.shape[0]
+    np= densities.shape[1]
     cs = ones(3)
-    lnt = zeros(ns)
-    if pv[0] > pv[1] or pv[2] > pv[3] or pv[0] > pv[2] or pv[1] > pv[3]:
+    lnt = zeros(np)
+    if pv[0] > pv[1]:
         return -inf
     else:
         lnt[:] = 0
-        for j in prange(ns):
-            lnt[j] = log(model(densities[j], radii[j], pv, cs, r0, dr, drocky, dwater)).sum()
-        maxl = max(lnt)
-        return maxl + log(exp(lnt - maxl).mean())
+        for j in prange(np):
+            lnt[j] = log(model(densities[:,j], radii[:,j], pv, cs, r0, dr, drocky, dwater).mean())
+        return lnt.sum()
 
 
 @njit(parallel=True)
 def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
     pvp = atleast_2d(pvp)
     npv = pvp.shape[0]
-    ns = densities.shape[0]
+    nob = densities.shape[1]
     lnl = zeros(npv)
     cs = ones(3)
     for i in prange(npv):
-        lnt = zeros(ns)
-        r1, r4 = pvp[i, 0], pvp[i, 1]
-        r2 = pvp[i, 3] - 0.5*pvp[i, 2]*(r4-r1)
-        r3 = pvp[i, 3] + 0.5*pvp[i, 2]*(r4-r1)
-        if r1 > r2 or r3 > r4 or r1 > r3 or r2 > r4:
+        lnt = zeros(nob)
+        if pvp[i, 0] > pvp[i, 1]:
             lnl[i] = -inf
         else:
             lnt[:] = 0
-            for j in range(ns):
-                lnt[j] = log(model(densities[j], radii[j], pvp[i], cs, r0, dr, drocky, dwater)).sum()
-            maxl = max(lnt)
-            lnl[i] = maxl + log(exp(lnt - maxl).mean())
+            for j in range(nob):
+                lnt[j] = log(model(densities[:, j], radii[:, j], pvp[i], cs, r0, dr, drocky, dwater).mean())
+            lnl[i] = lnt.sum()
     return lnl
 
 @njit
