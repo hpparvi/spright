@@ -42,7 +42,8 @@ class RMEstimator:
                  names: Optional[ndarray] = None,
                  radii: Optional[tuple[ndarray, ndarray]] = None,
                  masses: Optional[tuple[ndarray, ndarray]] = None,
-                 densities: Optional[tuple[ndarray, ndarray]] = None):
+                 densities: Optional[tuple[ndarray, ndarray]] = None,
+                 seed: Optional[int] = None):
 
         self.radius_means: Optional[ndarray] = None
         self.radius_uncertainties: Optional[ndarray] = None
@@ -55,6 +56,7 @@ class RMEstimator:
         self.mass_samples: Optional[ndarray] = None
         self.density_samples: Optional[ndarray] = None
 
+        self.seed: Optional[int] = seed
         self.nplanets: int = 0
         self.nsamples: int = 0
 
@@ -83,6 +85,7 @@ class RMEstimator:
         self.nplanets = self.planet_names.size
 
     def _create_samples(self, nsamples: int):
+        seed(self.seed)
         self.nsamples = nsamples
         self.radius_samples = r = zeros((nsamples, self.nplanets))
         self.mass_samples = m = zeros((nsamples, self.nplanets))
