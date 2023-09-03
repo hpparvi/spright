@@ -115,9 +115,10 @@ class RMEstimator:
 
     def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, population=None):
         if population is None:
-            population = self.lpf.de.population.copy()
-        else:
-            population = self.lpf.sampler.chain[:, -1, :].copy()
+            if self.lpf.sampler is None:
+                population = self.lpf.de.population.copy()
+            else:
+                population = self.lpf.sampler.chain[:, -1, :].copy()
         self.lpf.sample_mcmc(niter, thin, repeats, population.shape[0], population=population, save=False, vectorize=True)
 
     def posterior_samples(self, burn: int = 0, thin: int = 1):
