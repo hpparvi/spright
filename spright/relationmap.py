@@ -95,10 +95,10 @@ class RelationMap:
         m = isfinite(samples)
         return vs[m], samples[m]
 
-    def plot_map(self, ax=None):
+    def plot_map(self, ax=None, cm=None):
         if ax is None:
             fig, ax = subplots()
-        ax.imshow(self.data.T, origin='lower', aspect='auto',
+        ax.imshow(self.data.T, origin='lower', aspect='auto', cmap=cm,
                   extent=(self.x[0], self.x[-1], self.y[0], self.y[-1]))
         setp(ax, xlabel=f"{self.xname} [{self.xunit}]", ylabel=f"{self.yname} [{self.yunit}]")
 
