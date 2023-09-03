@@ -7,16 +7,20 @@ from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
     nan, floor, nanmedian, atleast_2d, mean, newaxis
 from numpy.random import normal, uniform, permutation
-from scipy.interpolate import RegularGridInterpolator, interp1d
+from scipy.interpolate import RegularGridInterpolator
+
 
 @njit
 def map_pv(pv):
     pv_mapped = pv[:11].copy()
     r1 = pv_mapped[0] = pv[0]
     r4 = pv_mapped[3] = pv[1]
-    whw = 0.5*pv[2]*(r4-r1)
-    pv_mapped[1] = pv[3] - whw
-    pv_mapped[2] = pv[3] + whw
+    d = r4 - r1
+    w = pv[2]   # WW population width
+    p = pv[3]   # WW population shape
+    a = 0.5 - abs(w - 0.5)
+    r2 = pv_mapped[1] = r1 + d * (1.0 - w + p * a)
+    r3 = pv_mapped[2] = r1 + d * (w + p * a)
     pv_mapped[8:11] = 10 ** pv[8:11]
     return pv_mapped
 
@@ -309,3 +313,4 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
         for l, f, lw in zip(lims, fmts, lws):
             ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw*lwscale)
     return ax
+
