@@ -34,10 +34,10 @@ class LPF(LogPosteriorFunction):
         self.rdm = rdm
 
     def _init_parameters(self):
-        self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 1.0, 3.0), ( 0.0, inf)),
-                      GP('r4',       'puffy transition end',     'R_earth',   UP( 1.4, 5.0), ( 0.0, inf)),
-                      GP('ww',       'relative ww population width', '', UP(-1, 1), (-1.0, 1.0)),
-                      GP('wc',       'water world population center', 'R_earth', NP(1.8, 0.2), (0.0, inf)),
+        self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 0.8, 2.5), ( 0.0, inf)),
+                      GP('r4',       'puffy transition end',     'R_earth',   UP( 1.0, 4.0), ( 0.0, inf)),
+                      GP('ww',       'relative ww population width', '', UP(0.0, 1.0), (0.0, 1.0)),
+                      GP('ws',       'water world population shape', 'R_earth', UP(-1.0, 1.0), (-1.0, 1.0)),
                       GP('cr',       'rocky planet iron ratio',        '',          UP( 0.0, 1.0), ( 0.0, 1.0)),
                       GP('cw',       'water world water ratio',        '',          NP( 0.5, 0.1),( 0.0, 1.0)),
                       GP('ip',       'SN density at r=2',  'gcm^3',            UP( 0.1, 7.0), ( 0.0, inf)),
