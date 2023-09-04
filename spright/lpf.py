@@ -42,9 +42,9 @@ class LPF(LogPosteriorFunction):
                       GP('cw',       'water world water ratio',        '',          NP( 0.5, 0.1),( 0.0, 1.0)),
                       GP('ip',       'SN density at r=2',  'gcm^3',            UP( 0.1, 7.0), ( 0.0, inf)),
                       GP('sp',       'SN density exponent',      'drho/drad',    NP(-0.5, 1.5), (-inf, inf)),
-                      GP('log10_sr', 'log10 RP density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf)),
-                      GP('log10_sw', 'log10 WW density pdf scale',         '',    NP( 0.0, 0.3), (-inf, inf)),
-                      GP('log10_sp', 'log10 SN density pdf scale',         '',    NP( 0.0, 0.6), (-inf, inf))])
+                      GP('log10_sr', 'log10 RP density pdf scale',         '',    NP( 0.0, 0.35), (-inf, inf)),
+                      GP('log10_sw', 'log10 WW density pdf scale',         '',    NP( 0.0, 0.35), (-inf, inf)),
+                      GP('log10_sp', 'log10 SN density pdf scale',         '',    NP( 0.0, 0.35), (-inf, inf))])
         self.ps.freeze()
 
     def model(self, rho, radius, pv, component):
