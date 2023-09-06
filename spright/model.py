@@ -5,7 +5,7 @@ from math import gamma
 from matplotlib.pyplot import subplots
 from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan, floor, nanmedian, atleast_2d, mean, newaxis
+    nan, floor, nanmedian, atleast_2d, mean, newaxis, atleast_1d, fabs
 from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator
 
@@ -40,8 +40,10 @@ def weights_full(x, y, x1, x2, x3, y1, y2, y3):
 @njit
 def map_r_to_xy(r, a1, a2, b1, b2):
     """Maps the planet radius to the mixture triangle (x,y) coordinates."""
-    x = clip((r-b1)/(b2-b1), 0.0, 1.0)
-    y = clip(clip((r-a1)/(a2-a1), 0.0, 1.0) - x, 0.0, 1.0)
+    db = max(b2-b1, 1e-4)
+    x = clip((r-b1)/db, 0.0, 1.0)
+    da = max(a2-a1, 1e-4)
+    y = clip(clip((r-a1)/da, 0.0, 1.0) - x, 0.0, 1.0)
     return x, y
 
 @njit
