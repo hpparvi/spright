@@ -5,7 +5,7 @@ from math import gamma
 from matplotlib.pyplot import subplots
 from numba import njit, prange
 from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan, floor, nanmedian, atleast_2d, mean, newaxis, atleast_1d, fabs
+    nan, floor, nanmedian, atleast_2d, mean, newaxis, atleast_1d, fabs, diff
 from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator
 
@@ -236,6 +236,10 @@ def create_radius_density_icdf(pvs: ndarray, r0, dr, drocky, dwater, pres: int =
     icdf = zeros((rres, pres))
     for i in range(rres):
         probs, icdf[i] = invert_cdf(densities, cdf[i], pres)
+
+    # fix the upper and lower boundaries
+    icdf[:, 0] = clip(icdf[:, 1] - diff(icdf[:, 1:3]).ravel(), 0.0, inf)
+    icdf[:, -1] = icdf[:, -2] + diff(icdf[:, -3:-1]).ravel()
     return radii, densities, probs, rdmap, icdf
 
 
