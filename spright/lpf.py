@@ -14,11 +14,11 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from numpy import inf, atleast_2d, squeeze, ndarray, clip
+from numpy import inf, atleast_2d, squeeze, ndarray, clip, where, nan_to_num
 from pytransit.lpf.logposteriorfunction import LogPosteriorFunction
 from pytransit.param import ParameterSet as PS, GParameter as GP, NormalPrior as NP, UniformPrior as UP
 
-from .model import model, lnlikelihood_vp
+from .model import model, lnlikelihood_vp, map_pv
 from .rdmodel import RadiusDensityModel
 
 
@@ -33,8 +33,24 @@ class LPF(LogPosteriorFunction):
         self.density_samples: ndarray = density_samples
         self.rdm = rdm
 
+        # Additional sub-Neptune density prior
+        # ------------------------------------
+        # This prior rejects any solutions where the beginning to the sub-Neptune population (r3)
+        # would have a higher density than a rocky-world at the same radius.
+        def sn_density_prior(pv):
+            pv = atleast_2d(pv)
+            d = pv[:, 1] - pv[:, 0]
+            a = 0.5 - abs(pv[:, 2] - 0.5)
+            r3 = pv[:,0] + d * (pv[:, 2] + pv[:, 3] * a)
+
+            puffy_rho_at_r3 = pv[:, 6] * pv[:, 0] ** pv[:, 7] / 2.0 ** pv[:, 7]
+            rocky_rho_at_r3 = nan_to_num(self.rdm.evaluate_rocky(0.0, r3), nan=inf)
+            return where(puffy_rho_at_r3 > rocky_rho_at_r3, -inf, 0.)
+        self._additional_log_priors.append(sn_density_prior)
+
+
     def _init_parameters(self):
-        self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 0.8, 2.5), ( 0.0, inf)),
+        self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 0.5, 2.5), ( 0.0, inf)),
                       GP('r4',       'puffy transition end',     'R_earth',   UP( 1.0, 4.0), ( 0.0, inf)),
                       GP('ww',       'relative ww population width', '', UP(0.0, 1.0), (0.0, 1.0)),
                       GP('ws',       'water world population shape', 'R_earth', UP(-1.0, 1.0), (-1.0, 1.0)),
