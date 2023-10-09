@@ -152,14 +152,14 @@ def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
 
 @njit(parallel=True)
 def lnlikelihood_sample(pv, densities, radii, r0, dr, drocky, dwater):
-    np= densities.shape[1]
+    nob = densities.shape[1]
     cs = ones(3)
-    lnt = zeros(np)
+    lnt = zeros(nob)
     if pv[0] > pv[1]:
         return -inf
     else:
         lnt[:] = 0
-        for j in prange(np):
+        for j in prange(nob):
             lnt[j] = log(model(densities[:,j], radii[:,j], pv, cs, r0, dr, drocky, dwater).mean())
         return lnt.sum()
 
@@ -297,8 +297,10 @@ def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin:
     models = zeros((ns, 3, r.size))
     for i, j in enumerate(permutation(samples.shape[0])[:ns]):
         d = samples.iloc[j]
-        r2 = d.wc - 0.5*d.ww*(d.r4-d.r1)
-        r3 = d.wc - 0.5*d.ww*(d.r4-d.r1)
+        t = d.r4 - d.r1
+        a = 0.5 - abs(d.ww - 0.5)
+        r2 = d.r1 + t * (1.0 - d.ww + d.ws * a)
+        r3 = d.r1 + t * (d.ww + d.ws * a)
         weights[i] = mixture_weights(*map_r_to_xy(r, d.r1, r2, r3, d.r4))
         models[i, 0] = rdm.evaluate_rocky(d.cr, r)
         models[i, 1] = rdm.evaluate_water(d.cw, r)
