@@ -189,9 +189,14 @@ class RMRelation:
         ps = self.posterior_samples
         pv = ps.median()
 
+        t = ps.r4 - ps.r1
+        a = 0.5 - abs(ps.ww - 0.5)
+        r2 = ps.r1 + t * (1.0 - ps.ww + ps.ws * a)
+        r3 = ps.r1 + t * (ps.ww + ps.ws * a)
+
         rw_start = ps.r1.quantile(0.15)
-        rw_end = (ps.wc - 0.5 * ps.ww * (ps.r4 - ps.r1)).quantile(0.85)
-        wp_start = (ps.wc + 0.5 * ps.ww * (ps.r4 - ps.r1)).quantile(0.15)
+        rw_end = r2.quantile(0.85)
+        wp_start = r3.quantile(0.15)
         wp_end = ps.r4.quantile(0.85)
 
         if quantity == 'density':
