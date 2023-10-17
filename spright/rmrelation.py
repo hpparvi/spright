@@ -49,6 +49,18 @@ class RMRelation:
         self.rdm = RadiusDensityModel()
         if fname is None:
             fname = Path(__file__).parent / 'data' / 'stpm.fits'
+        elif Path(fname).exists():
+            fname = Path(fname)
+        elif isinstance(fname, str):
+            if fname.lower() == 'stpm':
+                fname = Path(__file__).parent / 'data' / 'stpm.fits'
+            elif fname.lower() == 'tepcat_m':
+                fname = Path(__file__).parent / 'data' / 'tepcat_m.fits'
+            elif fname.lower() == 'tepcat_fgk':
+                fname = Path(__file__).parent / 'data' / 'tepcat_fgk.fits'
+            else:
+                raise ValueError()
+
         with pf.open(fname) as f:
             self.rdmap = RDRelationMap.load(fname)
             self.rmmap = RMRelationMap.load(fname)
