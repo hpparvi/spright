@@ -10,7 +10,7 @@ from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator
 
 
-@njit
+@njit(cache=True)
 def map_pv(pv):
     pv_mapped = pv[:11].copy()
     r1 = pv_mapped[0] = pv[0]
@@ -25,7 +25,7 @@ def map_pv(pv):
     return pv_mapped
 
 
-@njit
+@njit(cache=True)
 def spdf(x, m, s, l):
     """Non-standardized Student's t-distribution PDF"""
     return gamma(0.5*(l + 1))/(sqrt(l*pi)*s*gamma(l/2))*(1 + ((x - m)/s)**2/l)**(-0.5*(l + 1))
@@ -37,7 +37,7 @@ def weights_full(x, y, x1, x2, x3, y1, y2, y3):
     w3 = 1. - w1 - w2
     return w1, w2, w3
 
-@njit
+@njit(cache=True)
 def map_r_to_xy(r, a1, a2, b1, b2):
     """Maps the planet radius to the mixture triangle (x,y) coordinates."""
     db = max(b2-b1, 1e-4)
@@ -46,7 +46,7 @@ def map_r_to_xy(r, a1, a2, b1, b2):
     y = clip(clip((r-a1)/da, 0.0, 1.0) - x, 0.0, 1.0)
     return x, y
 
-@njit
+@njit(cache=True)
 def mixture_weights(x, y):
     """Calculates the mixture weights using interpolation inside a triangle."""
     w1 = 1. - x - y
@@ -55,12 +55,12 @@ def mixture_weights(x, y):
     return w1, w2, w3
 
 
-@njit
+@njit(cache=True)
 def lerp(x, a, b):
     return clip((x - a)/(b - a), 0.0, 1.0)
 
 
-@njit
+@njit(cache=True)
 def bilerp_s(r, c, r0, dr, c0, dc, data):
     nr = (r - r0) / dr
     ir = int(floor(nr))
@@ -86,7 +86,7 @@ def bilerp_s(r, c, r0, dr, c0, dc, data):
             + l11 * ac1 * ar1)
 
 
-@njit
+@njit(cache=True)
 def bilerp_vr(r, c, r0, dr, c0, dc, data):
     npt = r.size
     d = zeros(npt)
@@ -95,7 +95,7 @@ def bilerp_vr(r, c, r0, dr, c0, dc, data):
     return d
 
 
-@njit
+@njit(cache=True)
 def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
     npt = r.size
     d = zeros(npt)
@@ -104,7 +104,7 @@ def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
     return d
 
 
-@njit
+@njit(cache=True)
 def model(rho, radius, pv, component, r0, dr, drocky, dwater):
     pvm = map_pv(pv)
     rwstart, rwend, wpstart, wpend = pvm[0:4]
@@ -133,13 +133,13 @@ def average_model(samples, density, radius, components, r0, dr, drocky, dwater):
     return t/npv
 
 
-@njit
+@njit(cache=True)
 def lnlikelihood(theta, densities, radii, r0, dr, drocky, dwater):
     lnl = log(model(densities, radii, theta, ones(4), r0, dr, drocky, dwater)).sum()
     return lnl if isfinite(lnl) else inf
 
 
-@njit
+@njit(cache=True)
 def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
     npv = pvp.shape[0]
     lnl = zeros(npv)
@@ -182,7 +182,7 @@ def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
             lnl[i] = lnt.sum()
     return lnl
 
-@njit
+@njit(cache=True)
 def invert_cdf(values, cdf, res):
     x = linspace(0, 1.0, res)
     y = zeros(res)
@@ -263,57 +263,47 @@ def sample_mass(radius: tuple[float, float],
     return samples[isfinite(samples)]
 
 
-def model_means(pvp: ndarray, rdm, npt: int = 500, rmin: float = 0.5, rmax: float = 5.5, average: bool = True):
-    pvp = atleast_2d(pvp)
-    npv = pvp.shape[0]
-    radius = linspace(rmin, rmax, npt)
+def model_means(samples, rdm, quantity: str = 'density', rlims=(0.5, 4.0), nr: int = 200):
+    radius = linspace(*rlims, num=nr)
+    npv = samples.shape[0]
+    npt = radius.size
     models = {'rocky': zeros((2, npv, npt)), 'water': zeros((2, npv, npt)), 'puffy': zeros((2, npv, npt))}
-    for i, pv in enumerate(pvp):
-        models['rocky'][0, i] = where(radius < pv[1], rdm.evaluate_rocky(pv[4], radius), nan)
-        models['rocky'][1, i] = where(radius < pv[0], rdm.evaluate_rocky(pv[4], radius), nan)
-        models['water'][0, i] = where((radius >= pv[0]) & (radius <= pv[3]), rdm.evaluate_water(pv[5], radius), nan)
-        models['water'][1, i] = where((radius >= pv[1]) & (radius <= pv[2]), rdm.evaluate_water(pv[5], radius), nan)
-        models['puffy'][0, i] = where(radius > pv[2], pv[6]*radius**pv[7] / 2.0**pv[7], nan)
-        models['puffy'][1, i] = where(radius > pv[3], pv[6]*radius**pv[7] / 2.0**pv[7], nan)
 
-    if average:
-        for k in models.keys():
-            tmp = zeros((2, npt))
-            for i in range(2):
-                m = isfinite(models[k][i]).mean(0) < 0.5
-                models[k][i, :, m] = nan
-                tmp[i] = nanmedian(models[k][i], 0)
-            models[k] = tmp
+    if quantity == 'density':
+        c = 1.0
+    elif quantity == 'mass':
+        g_to_me = (1 * u.g).to(u.M_earth).value
+        v = 4/3 * pi * (radius*u.R_earth).to(u.cm)**3  # Planet's volume in cm^3
+        c = v * g_to_me
+    else:
+        raise ValueError
+
+    for i, pv in enumerate(samples):
+        pv = map_pv(pv)
+        models['rocky'][0, i] = c * rdm.evaluate_rocky(pv[4], radius)
+        models['water'][0, i] = c * rdm.evaluate_water(pv[5], radius)
+        models['puffy'][0, i] = c * pv[6] * radius ** pv[7] / 2.0 ** pv[7]
+
+        tx, ty = map_r_to_xy(radius, *pv[:4])
+        models['rocky'][1, i], models['water'][1, i], models['puffy'][1, i] = mixture_weights(tx, ty)
+
+    for k in models.keys():
+        tmp = zeros((2, npt))
+        for i in range(2):
+            tmp[i] = nanmedian(models[k][i], 0)
+        models[k] = tmp
 
     return radius, models
 
 
-def plot_model_means(samples, rdm, ax=None, ns: int = 500, res: int = 400, dmin: float = 0.5, dmax: float = 4.0, lwscale=1.0):
+def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0), nr:int = 200, lw: float = 1):
     if ax is None:
         fig, ax = subplots()
 
-    r = linspace(dmin, dmax, res)
-    weights = zeros((ns, 3, r.size))
-    models = zeros((ns, 3, r.size))
-    for i, j in enumerate(permutation(samples.shape[0])[:ns]):
-        d = samples.iloc[j]
-        t = d.r4 - d.r1
-        a = 0.5 - abs(d.ww - 0.5)
-        r2 = d.r1 + t * (1.0 - d.ww + d.ws * a)
-        r3 = d.r1 + t * (d.ww + d.ws * a)
-        weights[i] = mixture_weights(*map_r_to_xy(r, d.r1, r2, r3, d.r4))
-        models[i, 0] = rdm.evaluate_rocky(d.cr, r)
-        models[i, 1] = rdm.evaluate_water(d.cw, r)
-        models[i, 2] = d.ip * r**d.sp / 2**d.sp
-    models = mean(models, 0)
-    weights = weights.mean(0)
+    radius, models = model_means(samples, rdm, quantity, rlims, nr)
 
-    lims = 0.70, 0.40, 0.1
-    fmts = 'k-', 'k--', 'k:'
-    lws = 2, 1, 1
-
-    for i in range(3):
-        for l, f, lw in zip(lims, fmts, lws):
-            ax.plot(r, where(weights[i] > l, models[i], nan), f, lw=lw*lwscale)
+    for i,m in enumerate(('rocky', 'water', 'puffy')):
+        meanf, weight = models[m]
+        ax.plot(radius, where((weight > 0.99), meanf, nan), '-', c='k', lw=lw)
+        ax.plot(radius, where((weight > 0.01) & (weight<0.99), meanf, nan), '--', c='k', lw=lw)
     return ax
-
