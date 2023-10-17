@@ -144,11 +144,11 @@ class RDRelationMap(RelationMap):
     @classmethod
     def load(cls, filename: Union[Path, str]):
         with pf.open(filename) as f:
-            rdr = f[0].data.copy()
-            rdc = f['rd_cdf'].data.copy()
-            rdi = f['rd_icdf'].data.copy()
-            drc = f['dr_cdf'].data.copy()
-            dri = f['dr_icdf'].data.copy()
+            rdr = f[0].data.byteswap().newbyteorder()
+            rdc = f['rd_cdf'].data.byteswap().newbyteorder()
+            rdi = f['rd_icdf'].data.byteswap().newbyteorder()
+            drc = f['dr_cdf'].data.byteswap().newbyteorder()
+            dri = f['dr_icdf'].data.byteswap().newbyteorder()
             h = f[0].header
             density = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
             radius = h['CRVAL2'] + h['CDELT2']*arange(h['NAXIS2'])
@@ -165,11 +165,11 @@ class RMRelationMap(RelationMap):
     @classmethod
     def load(cls, filename: Union[Path, str]):
         with pf.open(filename) as f:
-            rmr = f['rmr'].data.copy()
-            rmc = f['rm_cdf'].data.copy()
-            rmi = f['rm_icdf'].data.copy()
-            mrc = f['mr_cdf'].data.copy()
-            mri = f['mr_icdf'].data.copy()
+            rmr = f['rmr'].data.byteswap().newbyteorder()
+            rmc = f['rm_cdf'].data.byteswap().newbyteorder()
+            rmi = f['rm_icdf'].data.byteswap().newbyteorder()
+            mrc = f['mr_cdf'].data.byteswap().newbyteorder()
+            mri = f['mr_icdf'].data.byteswap().newbyteorder()
             h = f['rmr'].header
             mass = h['CRVAL1'] + h['CDELT1']*arange(h['NAXIS1'])
             radius = h['CRVAL2'] + h['CDELT2']*arange(h['NAXIS2'])
