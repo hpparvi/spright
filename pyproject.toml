@@ -19,6 +19,10 @@ dependencies = ["numpy", "numba", "scipy", "uncertainties", "pandas",
 [project.urls]
 homepage = 'https://github.com/hpparvi/spright'
 
+[project.scripts]
+spright = "spright.scripts.spright:__main__"
+
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
@@ -28,3 +32,4 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ['spright', 'spright.data']
+
