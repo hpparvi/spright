@@ -22,7 +22,7 @@ from astropy.table import Table
 from astropy.time import Time
 from matplotlib.pyplot import subplots, setp
 from numpy import pi, diag, array, full, linspace, meshgrid, asarray, zeros, argmin, sort, ones, squeeze, isfinite, \
-    ndarray, nan
+    ndarray, nan, clip, inf
 from numpy.random import multivariate_normal, permutation, seed, normal
 from scipy.optimize import minimize
 
@@ -91,17 +91,17 @@ class RMEstimator:
         self.mass_samples = m = zeros((nsamples, self.nplanets))
         self.density_samples = zeros((nsamples, self.nplanets))
         for i in range(self.nplanets):
-            self.radius_samples[:, i] = normal(self.radius_means[i], self.radius_uncertainties[i], size=nsamples)
+            self.radius_samples[:, i] = clip(normal(self.radius_means[i], self.radius_uncertainties[i], size=nsamples), 0, inf)
         if self.density_means is None:
             for i in range(self.nplanets):
-                self.mass_samples[:, i] = normal(self.mass_means[i], self.mass_uncertainties[i], size=nsamples)
+                self.mass_samples[:, i] = clip(normal(self.mass_means[i], self.mass_uncertainties[i], size=nsamples), 0, inf)
             self.density_samples[:] = ((m * mearth) / (4 / 3 * pi * (r * rearth) ** 3))
             self.density_means = self.density_samples.mean(0)
             self.density_uncertainties = self.density_samples.std(0)
         else:
             self.mass_samples[:] = nan
             for i in range(self.nplanets):
-                self.density_samples[:, i] = normal(self.density_means[i], self.density_uncertainties[i], size=nsamples)
+                self.density_samples[:, i] = clip(normal(self.density_means[i], self.density_uncertainties[i], size=nsamples), 0, inf)
 
     def add_lnprior(self, lnprior):
         self.lpf._additional_log_priors.append(lnprior)
