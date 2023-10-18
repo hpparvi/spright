@@ -181,8 +181,8 @@ class RMEstimator:
         set_axes(drc, 'density', 'radius', d, r)
         set_axes(dri, 'density', 'icdf', d, p)
 
-        set_axes(rmr, 'radius', 'mass', r, d)
-        set_axes(rmc, 'radius', 'mass', r, d)
+        set_axes(rmr, 'radius', 'mass', r, m)
+        set_axes(rmc, 'radius', 'mass', r, m)
         set_axes(rmi, 'radius', 'icdf', r, p)
         set_axes(mrc, 'mass', 'radius', m, r)
         set_axes(mri, 'mass', 'icdf', m, p)
