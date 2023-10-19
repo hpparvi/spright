@@ -1,6 +1,6 @@
 [project]
 name = "spright"
-version = "23.10.19"
+version = "23.10.19.01"
 description = 'Bayesian radius-density-mass relation for small planets.'
 authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
 classifiers=[
@@ -22,14 +22,16 @@ homepage = 'https://github.com/hpparvi/spright'
 [project.scripts]
 spright = "spright.scripts.spright:__main__"
 
-
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-include-package-data = true
+#[tool.setuptools]
+#include-package-data = true
 
 [tool.setuptools.packages.find]
+#where = ["spright", "spright.data"]
 include = ['spright', 'spright.data']
 
+[tool.setuptools.package-data]
+"spright.data" = ["*.fits"]
