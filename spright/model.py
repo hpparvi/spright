@@ -9,6 +9,8 @@ from numpy import clip, sqrt, zeros_like, zeros, exp, log, ones, inf, pi, isfini
 from numpy.random import normal, uniform, permutation
 from scipy.interpolate import RegularGridInterpolator
 
+from spright.rdmodel import RadiusDensityModel
+
 
 @njit(cache=True)
 def map_pv(pv):
@@ -105,14 +107,14 @@ def bilerp_vrvc(r, c, r0, dr, c0, dc, data):
 
 
 @njit(cache=True)
-def model(rho, radius, pv, component, r0, dr, drocky, dwater):
+def model(rho, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
     pvm = map_pv(pv)
     rwstart, rwend, wpstart, wpend = pvm[0:4]
     crocky, cwater, mpuffy, dpuffy = pvm[4:8]
     srocky, swater, spuffy = pvm[8:]
 
-    mrocky = bilerp_vr(radius, crocky, r0, dr, 0.0, 0.05, drocky)
-    mwater = bilerp_vr(radius, cwater, r0, dr, 0.05, 0.05, dwater)
+    mrocky = bilerp_vr(radius, crocky, rr0, rdr, rx0, rdx, drocky)
+    mwater = bilerp_vr(radius, cwater, wr0, wdr, wx0, wdx, dwater)
     mpuffy = mpuffy * radius**dpuffy / 2.0**dpuffy
 
     tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
@@ -125,33 +127,39 @@ def model(rho, radius, pv, component, r0, dr, drocky, dwater):
 
 
 @njit(parallel=True)
-def average_model(samples, density, radius, components, r0, dr, drocky, dwater):
+def average_model(samples, density, radius, components, rr0, rdr, rx0, rdx, drocky,  wr0, wdr, wx0, wdx, dwater):
     npv = samples.shape[0]
     t = zeros_like(density)
     for i in prange(npv):
-        t += model(density, radius, samples[i], components, r0, dr, drocky, dwater)
+        t += model(density, radius, samples[i], components,
+                   rr0, rdr, rx0, rdx, drocky,
+                   wr0, wdr, wx0, wdx, dwater)
     return t/npv
 
 
 @njit(cache=True)
-def lnlikelihood(theta, densities, radii, r0, dr, drocky, dwater):
-    lnl = log(model(densities, radii, theta, ones(4), r0, dr, drocky, dwater)).sum()
+def lnlikelihood(theta, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
+    lnl = log(model(densities, radii, theta, ones(4),
+                    rr0, rdr, rx0, rdx, drocky,
+                    wr0, wdr, wx0, wdx, dwater)).sum()
     return lnl if isfinite(lnl) else inf
 
 
 @njit(cache=True)
-def lnlikelihood_v(pvp, densities, radii, r0, dr, drocky, dwater):
+def lnlikelihood_v(pvp, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
     npv = pvp.shape[0]
     lnl = zeros(npv)
     cs = ones(3)
     for i in range(npv):
-        lnl[i] = log(model(densities, radii, pvp[i], cs, r0, dr, drocky, dwater)).sum()
+        lnl[i] = log(model(densities, radii, pvp[i], cs,
+                           rr0, rdr, rx0, rdx, drocky,
+                           wr0, wdr, wx0, wdx, dwater)).sum()
         lnl[i] = lnl[i] if isfinite(lnl[i]) else inf
     return lnl
 
 
 @njit(parallel=True)
-def lnlikelihood_sample(pv, densities, radii, r0, dr, drocky, dwater):
+def lnlikelihood_sample(pv, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
     nob = densities.shape[1]
     cs = ones(3)
     lnt = zeros(nob)
@@ -160,12 +168,14 @@ def lnlikelihood_sample(pv, densities, radii, r0, dr, drocky, dwater):
     else:
         lnt[:] = 0
         for j in prange(nob):
-            lnt[j] = log(model(densities[:,j], radii[:,j], pv, cs, r0, dr, drocky, dwater).mean())
+            lnt[j] = log(model(densities[:,j], radii[:,j], pv, cs,
+                               rr0, rdr, rx0, rdx, drocky,
+                               wr0, wdr, wx0, wdx, dwater).mean())
         return lnt.sum()
 
 
 @njit(parallel=True)
-def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
+def lnlikelihood_vp(pvp, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
     pvp = atleast_2d(pvp)
     npv = pvp.shape[0]
     nob = densities.shape[1]
@@ -178,9 +188,12 @@ def lnlikelihood_vp(pvp, densities, radii, r0, dr, drocky, dwater):
         else:
             lnt[:] = 0
             for j in range(nob):
-                lnt[j] = log(model(densities[:, j], radii[:, j], pvp[i], cs, r0, dr, drocky, dwater).mean())
+                lnt[j] = log(model(densities[:, j], radii[:, j], pvp[i], cs,
+                                   rr0, rdr, rx0, rdx, drocky,
+                                   wr0, wdr, wx0, wdx, dwater).mean())
             lnl[i] = lnt.sum()
     return lnl
+
 
 @njit(cache=True)
 def invert_cdf(values, cdf, res):
@@ -200,7 +213,7 @@ def invert_cdf(values, cdf, res):
     return x, y
 
 
-def create_radius_density_map(pvs: ndarray, r0, dr, drocky, dwater,
+def create_radius_density_map(pvs: ndarray, rd: RadiusDensityModel,
                               rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
                               rres: int = 200, dres: int = 100, components = None) -> (ndarray, ndarray, ndarray):
     radii = linspace(*rlims, num=rres)
@@ -208,11 +221,13 @@ def create_radius_density_map(pvs: ndarray, r0, dr, drocky, dwater,
     dgrid, rgrid = meshgrid(densities, radii)
     if components is None:
         components = ones(3)
-    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components, r0, dr, drocky, dwater).reshape(rgrid.shape)
+    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components,
+                      rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(rgrid.shape)
     return radii, densities, m
 
 
-def create_radius_mass_map(pvs: ndarray, r0, dr, drocky, dwater,
+def create_radius_mass_map(pvs: ndarray, rd: RadiusDensityModel,
                            rlims: tuple[float, float] = (0.5, 6.0), mlims: tuple[float, float] = (0, 24),
                            rres: int = 200, mres: int = 100, components=None) -> (ndarray, ndarray, ndarray):
     radii = linspace(*rlims, num=rres)
@@ -223,14 +238,16 @@ def create_radius_mass_map(pvs: ndarray, r0, dr, drocky, dwater,
     c = ((1 * u.M_earth).to(u.g).value / (4 / 3 * pi * (radii * u.R_earth).to(u.cm) ** 3).value)
     if components is None:
         components = ones(3)
-    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components, r0, dr, drocky, dwater).reshape(rgrid.shape)
+    m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components,
+                      rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(rgrid.shape)
     return radii, masses, c[:, newaxis]*m
 
 
-def create_radius_density_icdf(pvs: ndarray, r0, dr, drocky, dwater, pres: int = 100,
+def create_radius_density_icdf(pvs: ndarray,rd: RadiusDensityModel, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
                                rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
-    radii, densities, rdmap = create_radius_density_map(pvs, r0, dr, drocky, dwater, rlims, dlims, rres, dres)
+    radii, densities, rdmap = create_radius_density_map(pvs, rd, rlims, dlims, rres, dres)
     cdf = rdmap.cumsum(axis=1)
     cdf /= cdf[:, -1:]
     icdf = zeros((rres, pres))
@@ -296,14 +313,14 @@ def model_means(samples, rdm, quantity: str = 'density', rlims=(0.5, 4.0), nr: i
     return radius, models
 
 
-def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0), nr:int = 200, lw: float = 1):
+def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0), nr: int = 200, lw: float = 1):
     if ax is None:
         fig, ax = subplots()
 
     radius, models = model_means(samples, rdm, quantity, rlims, nr)
 
-    for i,m in enumerate(('rocky', 'water', 'puffy')):
+    for i, m in enumerate(('rocky', 'water', 'puffy')):
         meanf, weight = models[m]
         ax.plot(radius, where((weight > 0.99), meanf, nan), '-', c='k', lw=lw)
-        ax.plot(radius, where((weight > 0.01) & (weight<0.99), meanf, nan), '--', c='k', lw=lw)
+        ax.plot(radius, where((weight > 0.01) & (weight < 0.99), meanf, nan), '--', c='k', lw=lw)
     return ax
