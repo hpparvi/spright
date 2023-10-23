@@ -136,10 +136,8 @@ class RMEstimator:
         rd = self.rdmodel
         df = self.lpf.posterior_samples()
         self._posterior_sample = pvs = df.iloc[permutation(df.shape[0])[:nsamples]]
-        radii, densities, rdm = create_radius_density_map(pvs.values, rd._r0, rd._dr, rd.drocky, rd.dwater,
-                                                          dres=dres, rres=rres, dlims=dlims, rlims=rlims)
-        radii, masses, rmm = create_radius_mass_map(pvs.values, rd._r0, rd._dr, rd.drocky, rd.dwater,
-                                                    mres=dres, rres=rres, mlims=mlims, rlims=rlims)
+        radii, densities, rdm = create_radius_density_map(pvs.values, rd, dres=dres, rres=rres, dlims=dlims, rlims=rlims)
+        radii, masses, rmm = create_radius_mass_map(pvs.values, rd, mres=dres, rres=rres, mlims=mlims, rlims=rlims)
         self.rdmap = RDRelationMap(rdm, radii, densities, pres)
         self.rmmap = RMRelationMap(rmm, radii, masses, pres)
 
