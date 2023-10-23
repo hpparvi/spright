@@ -19,7 +19,7 @@ import astropy.io.fits as pf
 from numpy import ndarray
 
 from .core import root
-from .model import bilerp_vrvc, bilerp_vr
+from .lerp import bilerp_vr, bilerp_vrvc
 
 
 def read_rdmodel(fname: Path | str):
