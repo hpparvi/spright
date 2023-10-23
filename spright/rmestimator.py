@@ -43,6 +43,8 @@ class RMEstimator:
                  radii: Optional[tuple[ndarray, ndarray]] = None,
                  masses: Optional[tuple[ndarray, ndarray]] = None,
                  densities: Optional[tuple[ndarray, ndarray]] = None,
+                 rock: str = 'z19',
+                 water: str = 'z19',
                  seed: Optional[int] = None):
 
         self.radius_means: Optional[ndarray] = None
@@ -63,7 +65,7 @@ class RMEstimator:
         self._init_data(names, radii, masses, densities)
         self._create_samples(nsamples)
 
-        self.rdmodel = RadiusDensityModel()
+        self.rdmodel = RadiusDensityModel(rock, water)
         self.lpf = LPF(self.radius_samples, self.density_samples, self.rdmodel)
 
         self.rdmap: Optional[RDRelationMap] = None
@@ -235,13 +237,17 @@ class RMEstimator:
                 if components[i] != 0:
                     cs = zeros(3)
                     cs[i] = 1.0
-                    pdf[:, :, i] = model(xrho.ravel(), xrad.ravel(), pv, cs, rd._r0, rd._dr, rd.drocky, rd.dwater).reshape(xrho.shape).T
+                    pdf[:, :, i] = model(xrho.ravel(), xrad.ravel(), pv, cs,
+                                         rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                                         rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(xrho.shape).T
         else:
             for i in range(3):
                 if components[i] != 0:
                     cs = zeros(3)
                     cs[i] = 1.0
-                    m = array([model(xrho.ravel(), xrad.ravel(), x, cs, rd._r0, rd._dr, rd.drocky, rd.dwater).reshape(xrho.shape) for x in
+                    m = array([model(xrho.ravel(), xrad.ravel(), x, cs,
+                                     rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                                     rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(xrho.shape) for x in
                                permutation(pv)[:max_samples]])
                     pdf[:, :, i] = m.mean(0).T
 
