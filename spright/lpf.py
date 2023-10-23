@@ -64,8 +64,13 @@ class LPF(LogPosteriorFunction):
         self.ps.freeze()
 
     def model(self, rho, radius, pv, component):
-        return model(rho, radius, pv, component, self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
+        r = self.rdm
+        return model(rho, radius, pv, component,
+                     r._rr0, r._rdr, r._rx0, r._rdx, r.drocky,
+                     r._wr0, r._wdr, r._wx0, r._wdx, r.dwater)
 
     def lnlikelihood(self, pv):
+        r = self.rdm
         return lnlikelihood_vp(pv, self.density_samples, self.radius_samples,
-                               self.rdm._r0, self.rdm._dr, self.rdm.drocky, self.rdm.dwater)
+                               r._rr0, r._rdr, r._rx0, r._rdx, r.drocky,
+                               r._wr0, r._wdr, r._wx0, r._wdx, r.dwater)
