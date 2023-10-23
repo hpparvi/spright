@@ -13,25 +13,36 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+from pathlib import Path
 
+import astropy.io.fits as pf
+from numpy import ndarray
 
-import pandas as pd
-
-from numpy import floor, nan, zeros, newaxis, linspace, ndarray
-from scipy.interpolate import interp1d
-
-from .core import mearth, rearth, rho, root
+from .core import root
 from .model import bilerp_vrvc, bilerp_vr
 
 
-def read_mr():
-    mr = pd.read_csv(root / 'data/mrtable3.txt', delim_whitespace=True, header=0, skiprows=[1], index_col=0)
-    mr.index.name = 'mass'
-    mr.drop(['cold_h2/he', 'max_coll_strip'], axis=1, inplace=True)
-    md = pd.DataFrame(rho(mr.values * rearth, mr.index.values[:, newaxis] * mearth))
-    md.columns = mr.columns
-    md.set_index(mr.index, inplace=True)
-    return mr, md
+def read_rdmodel(fname: Path | str):
+    with pf.open(root / 'data' / fname) as hdul:
+        dd = hdul[0].data.astype('d')
+        dh = hdul[0].header
+        r0 = dh['CRVAL1']
+        dr = dh['CDELT1']
+        xw0 = dh['CRVAL2']
+        dxw = dh['CDELT2']
+    return dd, r0, dr, xw0, dxw
+
+
+def read_rocky_zeng19():
+    return read_rdmodel('rocky_zeng19.fits')
+
+
+def read_water_zeng19():
+    return read_rdmodel('water_zeng19.fits')
+
+
+def read_water_ag21():
+    return read_rdmodel('water_aguichine21.fits')
 
 
 class RadiusDensityModel:
@@ -39,50 +50,46 @@ class RadiusDensityModel:
 
     Attributes
     ----------
-    models:
-    radius:
-    nm:
-    nr:
     drocky: ndarray
         Table containing radius-density models for rocky planets
     dwater: ndarray
         Table containing radius-density models for water worlds
 
     """
-    def __init__(self, nr: int = 200):
+    def __init__(self, rocky: str = 'z19', water: str = 'z19'):
         """
         Parameters
         ----------
-        nr
-            The resolution of the radius array.
+        rocky
+            The theoretical radius-density model to use for rocky planets.
+        water
+            The theoretical radius-density model to use for water-rich planets.
         """
-        self.mr, self.md = mr, md = read_mr()
-        self.models = self.mr.columns.values.copy()
-        self.radius = linspace(0.5, 3.5, nr)
-        self.nm = self.models.size
-        self.nr = nr
-        self._r0 = self.radius[0]
-        self._dr = self.radius[1] - self.radius[0]
 
-        density = zeros((self.nm, self.nr))
-        for i in range(self.nm):
-            ip = interp1d(mr.iloc[:, i].values, md.iloc[:, i].values, 1, bounds_error=False)
-            density[i] = ip(self.radius)
-        self.drocky = density[:21][::-1]
-        self.dwater = density[21:]
+        rocky_models = {'z19': read_rocky_zeng19}
+        water_models = {'z19': read_water_zeng19, 'a21': read_water_ag21}
+
+        if rocky not in rocky_models.keys():
+            raise ValueError()
+
+        if water not in water_models.keys():
+            raise ValueError()
+
+        self.drocky, self._rr0, self._rdr, self._rx0, self._rdx = rocky_models[rocky]()
+        self.dwater, self._wr0, self._wdr, self._wx0, self._wdx = water_models[water]()
 
     def evaluate_rocky(self, c, r):
         if isinstance(r, ndarray) and isinstance(c, ndarray):
-            return bilerp_vrvc(r, c, self.radius[0], self._dr, 0.0, 0.05, self.drocky)
+            return bilerp_vrvc(r, c, self._rr0, self._rdr, self._rx0, self._rdx, self.drocky)
         elif isinstance(r, ndarray):
-            return bilerp_vr(r, c, self.radius[0], self._dr, 0.0, 0.05, self.drocky)
+            return bilerp_vr(r, c, self._rr0, self._rdr, self._rx0, self._rdx, self.drocky)
         else:
             raise NotImplementedError
 
     def evaluate_water(self, c, r):
         if isinstance(r, ndarray) and isinstance(c, ndarray):
-            return bilerp_vrvc(r, c, self.radius[0], self._dr, 0.05, 0.05, self.dwater)
+            return bilerp_vrvc(r, c, self._wr0, self._wdr, self._wx0, self._wdx, self.dwater)
         elif isinstance(r, ndarray):
-            return bilerp_vr(r, c, self.radius[0], self._dr, 0.05, 0.05, self.dwater)
+            return bilerp_vr(r, c, self._wr0, self._wdr, self._wx0, self._wdx, self.dwater)
         else:
             raise NotImplementedError
