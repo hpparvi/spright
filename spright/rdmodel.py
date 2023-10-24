@@ -14,6 +14,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 from pathlib import Path
+from typing import Union
 
 import astropy.io.fits as pf
 from numpy import ndarray
@@ -22,7 +23,7 @@ from .core import root
 from .lerp import bilerp_vr, bilerp_vrvc
 
 
-def read_rdmodel(fname: Path | str):
+def read_rdmodel(fname: Union[Path, str]):
     with pf.open(root / 'data' / fname) as hdul:
         dd = hdul[0].data.astype('d')
         dh = hdul[0].header
