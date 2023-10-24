@@ -68,6 +68,7 @@ class Distribution:
                 return -log(dmodel(self.samples, pv)).sum() / self.size
 
             self._minimization_result = res = minimize(minfun, array([m1, 0.1, 1.0]), method='powell')
+            self.model, self.model_pars, self._m1, self._m2 = dmodel, res.x, res.x[1], None
             return dmodel, res.x, res.x[1], None
         else:
             def dmodel(x, pv):

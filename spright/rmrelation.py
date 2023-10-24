@@ -1,9 +1,11 @@
 from pathlib import Path
 from typing import Union, Optional
 
+import warnings
 import astropy.units as u
 import astropy.io.fits as pf
 import numpy as np
+from astropy.units import UnitsWarning
 from astropy.constants import M_sun
 from astropy.table import Table
 from numpy import arange, array, ndarray, pi, median, zeros, sqrt
@@ -61,12 +63,14 @@ class RMRelation:
             else:
                 raise ValueError()
 
-        with pf.open(fname) as f:
-            self.rdmap = RDRelationMap.load(fname)
-            self.rmmap = RMRelationMap.load(fname)
-            self.posterior_samples = Table.read(fname, 10).to_pandas()
-            self.catalog = Table.read(fname, 11).to_pandas()
-            self.rdsamples = Table.read(fname, 12).to_pandas()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UnitsWarning)
+            with pf.open(fname) as f:
+                self.rdmap = RDRelationMap.load(fname)
+                self.rmmap = RMRelationMap.load(fname)
+                self.posterior_samples = Table.read(fname, 10).to_pandas()
+                self.catalog = Table.read(fname, 11).to_pandas()
+                self.rdsamples = Table.read(fname, 12).to_pandas()
 
 
     def sample(self, quantity: str, radius: oprq = None, mass: oprq = None,
