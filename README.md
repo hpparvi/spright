@@ -1,8 +1,13 @@
 # Spright
 
 Spright (/spraɪt/; Parviainen, Luque, and Palle, submitted to MNRAS) is a fast Bayesian radius-density-mass relation for 
-small planets. The package offers methods to predict planetary masses, densities, and RV semi-amplitudes from an estimate 
-of the planet's radius, or planetary radii given an estimate of the planet's mass.
+small planets that allows one to predict planetary masses, densities, and RV semi-amplitudes from an estimate of the 
+planet's radius, or planetary radii given an estimate of the planet's mass.
+
+The package offers an easy-to-use command line script for people who are not overly interested in coding, and 
+nearly-as-easy-to-use set of Python classes for the people who prefer to code. The command line script can create 
+directly publication-quality plots, and the classes offer direct access to the predicted numerical distributions.
+
 
 ![relation_maps](notebooks/f00_relation_maps.svg)
 
@@ -20,7 +25,11 @@ R. Luque) and another for planets orbiting FGK stars (inferred from a filtered T
 
 ## Usage
 
-### Planet mass prediction
+### From the command line
+
+    spright --predict mass --radius 1.8 0.1 --plot-distribution
+
+### Python code
 
     from spright import RMRelation 
 
