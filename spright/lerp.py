@@ -19,8 +19,13 @@ def bilerp_s(r, c, r0, dr, c0, dc, data):
     ac1 = nc - ic
     ac2 = 1.0 - ac1
 
-    if ic < 0 or ir < 0 or ic >= data.shape[0] - 1 or ir >= data.shape[1] - 1:
+    if ic < 0 or ir < 0 or ic > data.shape[0] - 1 or ir >= data.shape[1] - 1:
         return nan
+
+    if ic == data.shape[0] - 1:
+        ic -= 1
+        ac1 = 1.0
+        ac2 = 0.0
 
     l00 = data[ic, ir]
     l01 = data[ic, ir + 1]
