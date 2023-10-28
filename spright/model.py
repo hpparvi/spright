@@ -265,7 +265,8 @@ def model_means(samples, rdm, quantity: str = 'density', rlims=(0.5, 4.0), nr: i
     return radius, models
 
 
-def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0), nr: int = 200, lw: float = 1):
+def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0), nr: int = 200, lw: float = 1,
+                     level = None, label=None):
     if ax is None:
         fig, ax = subplots()
 
@@ -273,6 +274,9 @@ def plot_model_means(samples, rdm, quantity='density', ax=None, rlims=(0.5, 4.0)
 
     for i, m in enumerate(('rocky', 'water', 'puffy')):
         meanf, weight = models[m]
-        ax.plot(radius, where((weight > 0.99), meanf, nan), '-', c='k', lw=lw)
-        ax.plot(radius, where((weight > 0.01) & (weight < 0.99), meanf, nan), '--', c='k', lw=lw)
+        if level is None:
+            ax.plot(radius, where((weight > 0.99), meanf, nan), '-', c='k', lw=lw, label=label)
+            ax.plot(radius, where((weight > 0.01) & (weight < 0.99), meanf, nan), '--', c='k', lw=lw)
+        else:
+            ax.plot(radius, where((weight > level), meanf, nan), '-', c='k', lw=lw, label=label)
     return ax
