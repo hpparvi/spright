@@ -50,21 +50,22 @@ def arg_to_ufloat(arg):
         return ufloat(arg[0], 1e-4)
 
 def __main__():
-    ap  = ArgumentParser()
-    ap.add_argument('--predict', type=str,  choices=['radius', 'mass', 'density', 'rv'], default='mass', dest='quantity',
-                    help='Quantity to predict')
-    ap.add_argument('--radius', '-r', nargs='+', dest='radius', help='Radius of the planet [R_Earth]')
-    ap.add_argument('--mass', '-m', nargs='+', dest='mass', help='Mass of the planet [M_Earth]')
-    ap.add_argument('--mstar', '-s', nargs='+', default=1.0, dest='mstar', help='Host star mass [M_Sun]')
-    ap.add_argument('--period', '-p', nargs='+', default=10.0, dest='period', help="Planet's orbital period [d]")
-    ap.add_argument('--eccentricity', '-e', nargs='+', default=0.0, dest='ecc', help="Planet's orbital eccentricity")
-    ap.add_argument('--n-samples', '-n', type=int, default=20_000, dest='ns', help='Number of samples to draw')
-    ap.add_argument('--plot-distribution', action='store_true', default=False)
-    ap.add_argument('--plot-map', action='store_true', default=False)
-    ap.add_argument('--dont-plot-terminal', action='store_false', default=True, dest='plot_terminal')
+    ap  = ArgumentParser(description="Spright: a fast mass-density-radius relation for small exoplanets.",
+                         epilog="Note: all the numeric values can be given as a single float or as two float where the second one stands for the measurement uncertainty.")
+    ap.add_argument('--predict', type=str,  choices=['radius', 'mass', 'density', 'rv'], default='mass', dest='quantity', help='Quantity to predict (default: %(default)s).')
+    ap.add_argument('--radius', '-r', nargs='+', dest='radius', help='Radius of the planet [R_Earth].')
+    ap.add_argument('--mass', '-m', nargs='+', dest='mass', help='Mass of the planet [M_Earth] either as a single float or two floats where the second one stands for the measurement uncertainty.')
+    ap.add_argument('--mstar', '-s', nargs='+', default=1.0, dest='mstar', help='Host star mass [M_Sun] either as a single float or two floats where the second one stands for the measurement uncertainty (default: %(default)s)..')
+    ap.add_argument('--period', '-p', nargs='+', default=10.0, dest='period', help="Planet's orbital period [d] (default: %(default)s).")
+    ap.add_argument('--eccentricity', '-e', nargs='+', default=0.0, dest='ecc', help="Planet's orbital eccentricity (default: %(default)s).")
+    ap.add_argument('--n-samples', '-n', type=int, default=20_000, dest='ns', help='Number of samples to draw (default: %(default)s).')
+    ap.add_argument('--model', default='stpm', help='Spright model to use. Can be either one of the included models or a path to a custom one (default: %(default)s).')
+    ap.add_argument('--plot-distribution', action='store_true', default=False, help='Plot the predicted distribution.')
+    ap.add_argument('--plot-map', action='store_true', default=False, help='Plot the 2D probability map used to create the distribution.')
+    ap.add_argument('--dont-plot-terminal', action='store_false', default=True, dest='plot_terminal', help="Don't plot the predicted distribution in the terminal.")
 
     args = ap.parse_args()
-    rmr = RMRelation()
+    rmr = RMRelation(args.model)
 
     if args.quantity in ('mass', 'density'):
         if args.radius is None:
