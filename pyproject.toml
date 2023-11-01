@@ -14,7 +14,7 @@ classifiers=[
 ]
 keywords = ['astronomy',  'astrophysics',  'exoplanets']
 dependencies = ["numpy", "numba", "scipy", "uncertainties", "pandas", "plotext",
-  "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee"]
+  "astropy", "pytransit", "arviz", "corner", "tqdm", "celerite", "emcee", "mpltern"]
 
 [project.urls]
 homepage = 'https://github.com/hpparvi/spright'
