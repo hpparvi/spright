@@ -1,0 +1,2 @@
+.. autoclass:: spright.RMEstimator
+   :members:

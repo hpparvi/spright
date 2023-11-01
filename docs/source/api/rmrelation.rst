@@ -1,0 +1,2 @@
+.. autoclass:: spright.RMRelation
+   :members:
