@@ -17,7 +17,7 @@ class Distribution:
 
     Attributes
     ----------
-    quantity: {'density', 'mass'}
+    quantity: {'density', 'mass', 'radius', 'k'}
         Stored quantity
     samples: ndarray
         Array of samples
@@ -25,10 +25,27 @@ class Distribution:
         Number of samples
 
     """
+
+    _quantities = ('density', 'mass', 'radius', 'k')
+
     def __init__(self, samples: ndarray, quantity: str, modes: tuple[float, Optional[float]], fit: bool = True):
+        if quantity not in self._quantities:
+            raise ValueError(f'Unsupported quantity, quantity must be one of {self._quantities}')
+
         self.quantity: str = quantity
         self.samples: ndarray = samples
         self.size: int = samples.size
+
+        if quantity == 'density':
+            self.units = 'g/cm^3'
+        elif quantity == 'mass':
+            self.units = 'M_Earth'
+        elif quantity == 'radius':
+            self.units = 'R_Earth'
+        elif quantity == 'k':
+            self.units = 'm/s'
+        else:
+            self.units = None
 
         self.is_bimodal: bool = modes[1] is not None
 
