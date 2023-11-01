@@ -5,17 +5,23 @@ import warnings
 import astropy.units as u
 import astropy.io.fits as pf
 import numpy as np
+
+import mpltern
+
 from astropy.units import UnitsWarning
 from astropy.constants import M_sun
 from astropy.table import Table
-from numpy import arange, array, ndarray, pi, median, zeros, sqrt
+from matplotlib import cm
+from matplotlib.pyplot import figure
+from numpy import arange, array, ndarray, pi, median, zeros, sqrt, concatenate
 from numpy.random import normal
+from pandas import DataFrame
 from scipy.constants import G
 from uncertainties import ufloat
 from uncertainties.core import Variable as UVar
 
 from .distribution import Distribution
-from .model import sample_density, sample_mass
+from .model import sample_density, sample_mass, map_pv, map_r_to_xy, mixture_weights
 from .rdmodel import RadiusDensityModel
 from .relationmap import RDRelationMap, RMRelationMap
 
@@ -199,6 +205,34 @@ class RMRelation:
         m, me = unpack_value(mass)
         ms, s = self.rmmap.sample((m, me), 'mr', nsamples)
         return Distribution(s, 'radius', (float(median(s)), None), False)
+
+    def predict_class(self, radius, mass=None, max_samples: int = 5000):
+        pvs = self.posterior_samples.values[:max_samples]
+        ns = pvs.shape[0]
+        r, re = unpack_value(radius)
+        rs = normal(r, re, ns)
+
+        weights = zeros((ns, 3))
+        for i, pv in enumerate(pvs):
+            pvm = map_pv(pv)
+            x, y = map_r_to_xy(rs[i:i+1], *pvm[:4])
+            weights[i] = concatenate(mixture_weights(x, y))
+        return DataFrame(weights, columns=['rocky', 'water', 'puffy'])
+
+    def plot_class(self, radius: None, weights: DataFrame = None, figsize=None):
+        if weights is None:
+            weights = self.predict_class(radius)
+        fig = figure(figsize=figsize)
+        ax = fig.add_subplot(projection="ternary")
+        ax.hexbin(weights.water, weights.rocky, weights.puffy, edgecolors="0.75", linewidths=0.5, gridsize=10,
+                  cmap=cm.Oranges)
+        ax.set_tlabel(f"Water world\n(P={1e2*weights.water.mean():2.0f}%)")
+        ax.set_llabel(f"Rocky planet\n(P={1e2*weights.rocky.mean():2.0f}%)")
+        ax.set_rlabel(f"Sub-Neptune\n(P={1e2*weights.puffy.mean():2.0f}%)")
+        ax.taxis.set_ticks([])
+        ax.laxis.set_ticks([])
+        ax.raxis.set_ticks([])
+        return ax
 
     def _identify_modes(self, r, quantity: str = 'density'):
         assert quantity in ('density', 'relative density', 'mass')
