@@ -5,13 +5,12 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10082653.svg)](https://doi.org/10.5281/zenodo.10082653)
 
 Spright (/spraɪt/; Parviainen, Luque, and Palle, accepted to MNRAS) is a fast Bayesian radius-density-mass relation for 
-small planets that allows one to predict planetary masses, densities, and RV semi-amplitudes from an estimate of the 
-planet's radius, or planetary radii given an estimate of the planet's mass.
+small planets.  The package allows one to predict planetary masses, densities, and RV semi-amplitudes given the 
+planet's radius or planetary radii given the planet's mass.
 
-The package offers an easy-to-use command line script for people who are not overly interested in coding, and 
-nearly-as-easy-to-use set of Python classes for the people who prefer to code. The command line script can create 
-directly publication-quality plots, and the classes offer direct access to the predicted numerical distributions.
-
+The package offers an easy-to-use command line script for people not overly interested in coding and
+a nearly-as-easy-to-use set of Python classes for those who prefer to code. The command line script can directly create 
+publication-quality plots, and the classes offer a full access to the predicted numerical distributions.
 
 ![relation_maps](notebooks/f00_relation_maps.svg)
 
