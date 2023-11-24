@@ -29,7 +29,8 @@ from scipy.optimize import minimize
 from .rdmodel import RadiusDensityModel
 from .version import version
 from .core import mearth, rearth
-from .model import model, create_radius_mass_map, create_radius_density_map
+from .model import create_radius_mass_map, create_radius_density_map
+from .analytical_model import model
 from .relationmap import RMRelationMap, RDRelationMap
 from .lpf import LPF
 

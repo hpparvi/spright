@@ -6,7 +6,7 @@ from matplotlib.pyplot import subplots, setp
 from numpy import inf, log, array, percentile, argmin, ndarray, median
 from scipy.optimize import minimize
 
-from .model import spdf
+from .analytical_model import spdf
 
 np.seterr(invalid='ignore')
 

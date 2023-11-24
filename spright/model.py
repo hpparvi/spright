@@ -1,92 +1,14 @@
 import astropy.units as u
 
-from math import gamma
-
 from matplotlib.pyplot import subplots
 from numba import njit, prange
-from numpy import clip, sqrt, zeros_like, zeros, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
+from numpy import clip, zeros, log, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
     nan, nanmedian, atleast_2d, newaxis, diff
 from numpy.random import normal, uniform
 from scipy.interpolate import RegularGridInterpolator
 
-from .lerp import bilerp_vr
+from .analytical_model import map_pv, map_r_to_xy, mixture_weights, model, average_model
 from .rdmodel import RadiusDensityModel
-
-
-@njit(cache=True)
-def map_pv(pv):
-    pv_mapped = pv[:11].copy()
-    r1 = pv_mapped[0] = pv[0]
-    r4 = pv_mapped[3] = pv[1]
-    d = r4 - r1
-    w = pv[2]   # WW population width
-    p = pv[3]   # WW population shape
-    a = 0.5 - abs(w - 0.5)
-    r2 = pv_mapped[1] = r1 + d * (1.0 - w + p * a)
-    r3 = pv_mapped[2] = r1 + d * (w + p * a)
-    pv_mapped[8:11] = 10 ** pv[8:11]
-    return pv_mapped
-
-
-@njit(cache=True)
-def spdf(x, m, s, l):
-    """Non-standardized Student's t-distribution PDF"""
-    return gamma(0.5*(l + 1))/(sqrt(l*pi)*s*gamma(l/2))*(1 + ((x - m)/s)**2/l)**(-0.5*(l + 1))
-
-
-def weights_full(x, y, x1, x2, x3, y1, y2, y3):
-    w1 = ((y2-y3)*(x - x3) + (x3-x2)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
-    w2 = ((y3-y1)*(x - x3) + (x1-x3)*(y-y3)) / ((y2-y3)*(x1-x3) + ((x3-x2)*(y1-y3)))
-    w3 = 1. - w1 - w2
-    return w1, w2, w3
-
-@njit(cache=True)
-def map_r_to_xy(r, a1, a2, b1, b2):
-    """Maps the planet radius to the mixture triangle (x,y) coordinates."""
-    db = max(b2-b1, 1e-4)
-    x = clip((r-b1)/db, 0.0, 1.0)
-    da = max(a2-a1, 1e-4)
-    y = clip(clip((r-a1)/da, 0.0, 1.0) - x, 0.0, 1.0)
-    return x, y
-
-@njit(cache=True)
-def mixture_weights(x, y):
-    """Calculates the mixture weights using interpolation inside a triangle."""
-    w1 = 1. - x - y
-    w2 = y
-    w3 = 1. - w1 - w2
-    return w1, w2, w3
-
-
-@njit(cache=True)
-def model(rho, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
-    pvm = map_pv(pv)
-    rwstart, rwend, wpstart, wpend = pvm[0:4]
-    crocky, cwater, mpuffy, dpuffy = pvm[4:8]
-    srocky, swater, spuffy = pvm[8:]
-
-    mrocky = bilerp_vr(radius, crocky, rr0, rdr, rx0, rdx, drocky)
-    mwater = bilerp_vr(radius, cwater, wr0, wdr, wx0, wdx, dwater)
-    mpuffy = mpuffy * radius**dpuffy / 2.0**dpuffy
-
-    tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
-    w1, w2, w3 = mixture_weights(tx, ty)
-
-    procky = component[0] * w1 * spdf(rho, mrocky, srocky, 5.0)
-    pwater = component[1] * w2 * spdf(rho, mwater, swater, 5.0)
-    ppuffy = component[2] * w3 * spdf(rho, mpuffy, spuffy, 5.0)
-    return where(isfinite(procky), procky, 1e-7) + where(isfinite(pwater), pwater, 1e-7) + ppuffy
-
-
-@njit(parallel=True)
-def average_model(samples, density, radius, components, rr0, rdr, rx0, rdx, drocky,  wr0, wdr, wx0, wdx, dwater):
-    npv = samples.shape[0]
-    t = zeros_like(density)
-    for i in prange(npv):
-        t += model(density, radius, samples[i], components,
-                   rr0, rdr, rx0, rdx, drocky,
-                   wr0, wdr, wx0, wdx, dwater)
-    return t/npv
 
 
 @njit(cache=True)
@@ -120,7 +42,7 @@ def lnlikelihood_sample(pv, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, w
     else:
         lnt[:] = 0
         for j in prange(nob):
-            lnt[j] = log(model(densities[:,j], radii[:,j], pv, cs,
+            lnt[j] = log(model(densities[:, j], radii[:, j], pv, cs,
                                rr0, rdr, rx0, rdx, drocky,
                                wr0, wdr, wx0, wdx, dwater).mean())
         return lnt.sum()

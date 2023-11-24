@@ -21,7 +21,8 @@ from uncertainties import ufloat
 from uncertainties.core import Variable as UVar
 
 from .distribution import Distribution
-from .model import sample_density, sample_mass, map_pv, map_r_to_xy, mixture_weights
+from .model import sample_density, sample_mass
+from .analytical_model import map_pv, map_r_to_xy, mixture_weights
 from .rdmodel import RadiusDensityModel
 from .relationmap import RDRelationMap, RMRelationMap
 
