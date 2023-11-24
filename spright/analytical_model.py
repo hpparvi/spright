@@ -1,7 +1,7 @@
 from math import gamma
 
 from numba import njit, prange
-from numpy import sqrt, pi, clip, where, isfinite, zeros_like
+from numpy import sqrt, pi, clip, where, isfinite, zeros_like, atleast_1d, zeros, ndarray
 
 from spright.lerp import bilerp_vr
 
@@ -54,8 +54,12 @@ def mixture_weights(x, y):
 
 
 @njit(cache=True)
-def model(rho, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
+def model(density, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater) -> ndarray:
+    density = atleast_1d(density)
+    radius = atleast_1d(radius)
     pvm = map_pv(pv)
+    model = zeros((3, density.size))
+
     rwstart, rwend, wpstart, wpend = pvm[0:4]
     crocky, cwater, mpuffy, dpuffy = pvm[4:8]
     srocky, swater, spuffy = pvm[8:]
@@ -67,16 +71,21 @@ def model(rho, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0,
     tx, ty = map_r_to_xy(radius, rwstart, rwend, wpstart, wpend)
     w1, w2, w3 = mixture_weights(tx, ty)
 
-    procky = component[0] * w1 * spdf(rho, mrocky, srocky, 5.0)
-    pwater = component[1] * w2 * spdf(rho, mwater, swater, 5.0)
-    ppuffy = component[2] * w3 * spdf(rho, mpuffy, spuffy, 5.0)
-    return where(isfinite(procky), procky, 1e-7) + where(isfinite(pwater), pwater, 1e-7) + ppuffy
+    procky = component[0] * w1 * spdf(density, mrocky, srocky, 5.0)
+    pwater = component[1] * w2 * spdf(density, mwater, swater, 5.0)
+    ppuffy = component[2] * w3 * spdf(density, mpuffy, spuffy, 5.0)
+
+    model[0, :] = where(isfinite(procky), procky, 0.0)
+    model[1, :] = where(isfinite(pwater), pwater, 0.0)
+    model[2, :] = ppuffy
+
+    return model
 
 
 @njit(parallel=True)
 def average_model(samples, density, radius, components, rr0, rdr, rx0, rdx, drocky,  wr0, wdr, wx0, wdx, dwater):
     npv = samples.shape[0]
-    t = zeros_like(density)
+    t = zeros((3, density.size))
     for i in prange(npv):
         t += model(density, radius, samples[i], components,
                    rr0, rdr, rx0, rdx, drocky,

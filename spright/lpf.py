@@ -18,7 +18,7 @@ from numpy import inf, atleast_2d, squeeze, ndarray, clip, where, nan_to_num
 from pytransit.lpf.logposteriorfunction import LogPosteriorFunction
 from pytransit.param import ParameterSet as PS, GParameter as GP, NormalPrior as NP, UniformPrior as UP
 
-from .model import lnlikelihood_vp
+from .lnlikelihood import lnlikelihood_vp
 from .analytical_model import map_pv, model
 from .rdmodel import RadiusDensityModel
 
