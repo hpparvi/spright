@@ -198,8 +198,8 @@ def create_radius_mass_map(pvs: ndarray, rd: RadiusDensityModel,
 
 def create_radius_density_icdf(pvs: ndarray,rd: RadiusDensityModel, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
-                               rres: int = 200, dres: int = 100) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
-    radii, densities, rdmap = create_radius_density_map(pvs, rd, rlims, dlims, rres, dres)
+                               rres: int = 200, dres: int = 100, components=None) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
+    radii, densities, rdmap = create_radius_density_map(pvs, rd, rlims, dlims, rres, dres, components=components)
     cdf = rdmap.cumsum(axis=1)
     cdf /= cdf[:, -1:]
     icdf = zeros((rres, pres))
