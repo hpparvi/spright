@@ -1,0 +1,90 @@
+cff-version: 1.2.0
+title: >-
+  SPRIGHT: a probabilistic mass-density-radius relation for small planets 
+message: >-
+  If you made the use of Spright, I would appreciate it if you give credit.
+authors:
+  - given-names: Hannu
+    family-names: Parviainen
+    email: hannu@iac.es
+    affiliation: Instituto de Astrofísica de Canarias
+    orcid: 'https://orcid.org/0000-0001-5519-1391'
+  - given-names: Rafael
+    family-names: Luque
+    email: rluque@uchicago.edu
+    affiliation: University of Chicago
+    orcid: 'https://orcid.org/0000-0002-4671-2957'
+  - given-names: Enric
+    family-names: Palle
+    email: epalle@iac.es
+    affiliation: Instituto de Astrofísica de Canarias
+    orcid: 'https://orcid.org/0000-0003-0987-1593'
+identifiers:
+  - type: doi
+    value: 10.1093/mnras/stad3504
+repository-code: 'https://github.com/hpparvi/spright'
+abstract: >-
+  We present SPRIGHT, a PYTHON package that implements a
+  fast and lightweight mass-density-radius relation for
+  small planets. The relation represents the joint planetary
+  radius and bulk density probability distribution as a mean
+  posterior predictive distribution of an analytical
+  three-component mixture model. The analytical model, in
+  turn, represents the probability for the planetary bulk
+  density as three generalized Student's t-distributions
+  with radius-dependent weights and means based on
+  theoretical composition models. The approach is based on
+  Bayesian inference and aims to overcome the rigidity of
+  simple parametric mass-radius relations and the danger of
+  overfitting of non-parametric mass-radius relations. The
+  package includes a set of pre-trained and ready-to-use
+  relations based on two M-dwarf catalogues, one catalogue
+  containing stars of spectral types F, G, and K (FGK
+  stars), and two theoretical composition models for
+  water-rich planets. The inference of new models is easy
+  and fast, and the package includes a command line tool
+  that allows for coding-free use of the relation, including
+  the creation of publication-quality plots. Additionally,
+  we study whether the current mass and radius observations
+  of small exoplanets support the presence of a population
+  of water-rich planets positioned between rocky planets and
+  sub-Neptunes. The study is based on Bayesian model
+  comparison and shows somewhat strong support against the
+  existence of a water-world population around M dwarfs.
+  However, the results of the study depend on the chosen
+  theoretical water-world density model. A more conclusive
+  result requires a larger sample of precisely characterized
+  planets and community consensus on a realistic water-world
+  interior structure and atmospheric composition model. 
+keywords:
+  - exoplanets
+preferred-citation:
+  type: article
+  title: >-
+    SPRIGHT: a probabilistic mass-density-radius relation for small planets 
+  authors:
+    - given-names: Hannu
+      family-names: Parviainen
+      email: hannu@iac.es
+      affiliation: Instituto de Astrofísica de Canarias
+      orcid: 'https://orcid.org/0000-0001-5519-1391'
+    - given-names: Rafael
+      family-names: Luque
+      email: rluque@uchicago.edu
+      affiliation: University of Chicago
+      orcid: 'https://orcid.org/0000-0002-4671-2957'
+    - given-names: Enric
+      family-names: Palle
+      email: epalle@iac.es
+      affiliation: Instituto de Astrofísica de Canarias
+      orcid: 'https://orcid.org/0000-0003-0987-1593'
+  doi: "10.1093/mnras/stad3504"
+  journal: 'MNRAS'
+  year: 2024
+  month: 1
+  start: 5693
+  end: 5716
+  volume: 527
+  number: 3
+  url: 'https://academic.oup.com/mnras/article/527/3/5693/7420509'
+license: GPL-3.0
