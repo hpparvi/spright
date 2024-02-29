@@ -3,7 +3,7 @@ import astropy.units as u
 from matplotlib.pyplot import subplots
 from numba import njit
 from numpy import clip, zeros, ones, inf, pi, isfinite, linspace, meshgrid, ndarray, where, \
-    nan, nanmedian, newaxis, diff
+    nan, nanmedian, newaxis, diff, zeros_like, squeeze
 from numpy.random import normal, uniform
 from scipy.interpolate import RegularGridInterpolator
 
@@ -39,7 +39,7 @@ def create_radius_density_map(pvs: ndarray, rd: RadiusDensityModel,
         components = ones(3)
     m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components,
                       rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
-                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(rgrid.shape)
+                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape((3, rres, dres))
     return radii, densities, m
 
 
@@ -56,24 +56,33 @@ def create_radius_mass_map(pvs: ndarray, rd: RadiusDensityModel,
         components = ones(3)
     m = average_model(pvs, dgrid.ravel(), rgrid.ravel(), components,
                       rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
-                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(rgrid.shape)
+                      rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape((3, rres, mres))
     return radii, masses, c[:, newaxis]*m
 
 
 def create_radius_density_icdf(pvs: ndarray,rd: RadiusDensityModel, pres: int = 100,
                                rlims: tuple[float, float] = (0.5, 6.0), dlims: tuple[float, float] = (0, 12),
-                               rres: int = 200, dres: int = 100, components=None) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
+                               rres: int = 200, dres: int = 100,
+                               separate_components: bool = False, components=None) -> (ndarray, ndarray, ndarray, ndarray, ndarray):
     radii, densities, rdmap = create_radius_density_map(pvs, rd, rlims, dlims, rres, dres, components=components)
-    cdf = rdmap.cumsum(axis=1)
-    cdf /= cdf[:, -1:]
-    icdf = zeros((rres, pres))
-    for i in range(rres):
-        probs, icdf[i] = invert_cdf(densities, cdf[i], pres)
+    probs = linspace(0, 1, pres)
 
-    # fix the upper and lower boundaries
-    icdf[:, 0] = clip(icdf[:, 1] - diff(icdf[:, 1:3]).ravel(), 0.0, inf)
-    icdf[:, -1] = icdf[:, -2] + diff(icdf[:, -3:-1]).ravel()
-    return radii, densities, probs, rdmap, icdf
+    if separate_components:
+        icdf = zeros((3, rres, pres))
+    else:
+        rdmap = rdmap.sum(0).reshape((1, rres, dres))
+        icdf = zeros((1, rres, pres))
+
+    for ic in range(rdmap.shape[0]):
+        cdf = rdmap[ic].cumsum(axis=1)
+        cdf /= cdf[:, -1:]
+        for i in range(rres):
+            _, icdf[ic, i] = invert_cdf(densities, cdf[i], pres)
+
+        # fix the upper and lower boundaries
+        icdf[ic, :, 0] = clip(icdf[ic, :, 1] - diff(icdf[ic, :, 1:3]).ravel(), 0.0, inf)
+        icdf[ic, :, -1] = icdf[ic, :, -2] + diff(icdf[ic, :, -3:-1]).ravel()
+    return radii, densities, probs, squeeze(rdmap), squeeze(icdf)
 
 
 def sample_density(radius: tuple[float, float],

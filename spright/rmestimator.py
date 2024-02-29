@@ -146,13 +146,13 @@ class RMEstimator:
         if self.lpf.sampler is None or self.rdmap is None:
             raise ValueError("Cannot save before computing the maps")
 
-        rdh = pf.PrimaryHDU(self.rdmap.data)
+        rdh = pf.PrimaryHDU(self.rdmap._pmapc)
         rdc = pf.ImageHDU(self.rdmap.xy_cdf, name='rd_cdf')
         rdi = pf.ImageHDU(self.rdmap.xy_icdf, name='rd_icdf')
         drc = pf.ImageHDU(self.rdmap.yx_cdf, name='dr_cdf')
         dri = pf.ImageHDU(self.rdmap.yx_icdf, name='dr_icdf')
 
-        rmr = pf.ImageHDU(self.rmmap.data, name='rmr')
+        rmr = pf.ImageHDU(self.rmmap._pmapc, name='rmr')
         rmc = pf.ImageHDU(self.rmmap.xy_cdf, name='rm_cdf')
         rmi = pf.ImageHDU(self.rmmap.xy_icdf, name='rm_icdf')
         mrc = pf.ImageHDU(self.rmmap.yx_cdf, name='mr_cdf')

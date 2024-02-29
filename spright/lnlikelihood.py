@@ -8,7 +8,7 @@ from spright.analytical_model import model
 def lnlikelihood(theta, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, wx0, wdx, dwater):
     lnl = log(model(densities, radii, theta, ones(4),
                     rr0, rdr, rx0, rdx, drocky,
-                    wr0, wdr, wx0, wdx, dwater)).sum()
+                    wr0, wdr, wx0, wdx, dwater).sum(0)).sum()
     return lnl if isfinite(lnl) else inf
 
 
@@ -20,7 +20,7 @@ def lnlikelihood_v(pvp, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr, 
     for i in range(npv):
         lnl[i] = log(model(densities, radii, pvp[i], cs,
                            rr0, rdr, rx0, rdx, drocky,
-                           wr0, wdr, wx0, wdx, dwater)).sum()
+                           wr0, wdr, wx0, wdx, dwater).sum(0)).sum()
         lnl[i] = lnl[i] if isfinite(lnl[i]) else inf
     return lnl
 
@@ -37,7 +37,7 @@ def lnlikelihood_sample(pv, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, w
         for j in prange(nob):
             lnt[j] = log(model(densities[:, j], radii[:, j], pv, cs,
                                rr0, rdr, rx0, rdx, drocky,
-                               wr0, wdr, wx0, wdx, dwater).mean())
+                               wr0, wdr, wx0, wdx, dwater).sum(0).mean())
         return lnt.sum()
 
 
@@ -57,6 +57,6 @@ def lnlikelihood_vp(pvp, densities, radii, rr0, rdr, rx0, rdx, drocky, wr0, wdr,
             for j in range(nob):
                 lnt[j] = log(model(densities[:, j], radii[:, j], pvp[i], cs,
                                    rr0, rdr, rx0, rdx, drocky,
-                                   wr0, wdr, wx0, wdx, dwater).mean())
+                                   wr0, wdr, wx0, wdx, dwater).sum(0).mean())
             lnl[i] = lnt.sum()
     return lnl
