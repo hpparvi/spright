@@ -1,6 +1,6 @@
 [project]
 name = "spright"
-version = "23.11.01"
+version = "24.02.29"
 description = 'Bayesian radius-density-mass relation for small planets.'
 authors=[{name='Hannu Parviainen', email='hpparvi@gmail.com'}]
 classifiers=[
