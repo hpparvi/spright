@@ -107,7 +107,7 @@ class RMRelation:
         ndarray
             Samples from either the density or mass posterior given the planet radius.
         """
-        qs = ('radius', 'density', 'mass', 'k')
+        qs = ('radius', 'density', 'mass', 'k', 'rv')
         if quantity not in qs:
             raise ValueError(f"Quantity has to be one of {qs}")
 
@@ -115,7 +115,7 @@ class RMRelation:
             return self.predict_density(radius, nsamples)
         elif quantity == 'mass':
             return self.predict_mass(radius, nsamples)
-        elif quantity == 'k':
+        elif quantity in ('k', 'rv'):
             return self.predict_rv_semi_amplitude(radius, period, mstar, ecc, nsamples)
         if quantity == 'radius':
             return self.predict_radius(mass, nsamples)

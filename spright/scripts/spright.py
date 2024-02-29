@@ -45,9 +45,9 @@ def arg_to_ufloat(arg):
     elif len(arg) > 2:
         raise ValueError
     elif len(arg) == 2:
-        return ufloat(arg[0], arg[1])
+        return ufloat(float(arg[0]), float(arg[1]))
     else:
-        return ufloat(arg[0], 1e-4)
+        return ufloat(float(arg[0]), 1e-4)
 
 def __main__():
     ap  = ArgumentParser(description="Spright: a fast mass-density-radius relation for small exoplanets.",
