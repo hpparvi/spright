@@ -78,7 +78,6 @@ def model(density, radius, pv, component, rr0, rdr, rx0, rdx, drocky, wr0, wdr, 
     model[0, :] = where(isfinite(procky), procky, 0.0)
     model[1, :] = where(isfinite(pwater), pwater, 0.0)
     model[2, :] = ppuffy
-
     return model
 
 
