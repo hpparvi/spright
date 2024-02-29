@@ -65,10 +65,12 @@ class Distribution:
              f"95% limits: {percentile(self.samples, [2.5,97.5]).round(1)}\n\n"
              f"Distribution model:\n")
 
-        if self.is_bimodal:
-            s = f"  {1 - p[0]:3.2f} × T(m={p[1]:3.2f}, σ={p[2]:3.2f}, λ={p[3]:3.2f})\n+ {p[0]:3.2f} × T(m={p[4]:3.2f}, σ={p[5]:3.2f}, λ={p[6]:3.2f})"
-        else:
-            s = f"  T(m={p[0]:3.2f}, σ={p[1]:3.2f}, λ={p[2]:3.2f})"
+        s = ""
+        if p is not None:
+            if self.is_bimodal:
+                s = f"  {1 - p[0]:3.2f} × T(m={p[1]:3.2f}, σ={p[2]:3.2f}, λ={p[3]:3.2f})\n+ {p[0]:3.2f} × T(m={p[4]:3.2f}, σ={p[5]:3.2f}, λ={p[6]:3.2f})"
+            else:
+                s = f"  T(m={p[0]:3.2f}, σ={p[1]:3.2f}, λ={p[2]:3.2f})"
         return c + s
 
     def _fit_kde(self) -> tuple[ndarray, ndarray]:
