@@ -5,10 +5,11 @@ from typing import Optional, Union
 
 from matplotlib.pyplot import subplots, setp
 from numpy import ndarray, zeros, isfinite, arange, linspace, inf, diff, clip
-from numpy.random import normal, uniform
+from numpy.random import uniform
 from scipy.interpolate import RegularGridInterpolator
 
 from .model import invert_cdf
+from .util import sample_distribution
 
 
 class RelationMap:
@@ -217,7 +218,7 @@ class RelationMap:
             rgi = RegularGridInterpolator((self.x, self.probs), self.xy_icdf, bounds_error=False)
         else:
             rgi = RegularGridInterpolator((self.y, self.probs), self.yx_icdf, bounds_error=False)
-        vs = normal(v[0], v[1], nsamples)
+        vs = sample_distribution(v, nsamples)
         samples = rgi((vs, uniform(size=nsamples)))
         m = isfinite(samples)
         return vs[m], samples[m]
@@ -247,7 +248,7 @@ class RelationMap:
             rgi = RegularGridInterpolator((self.x, self.probs), self.xy_icdf, bounds_error=False)
         else:
             rgi = RegularGridInterpolator((self.y, self.probs), self.yx_icdf, bounds_error=False)
-        vs = normal(v[0], v[1], nsamples)
+        vs = sample_distribution(v, nsamples)
         samples = rgi((vs, uniform(size=nsamples)))
         m = isfinite(samples)
         return vs[m], samples[m]

@@ -25,6 +25,7 @@ from .model import sample_density, sample_mass
 from .analytical_model import map_pv, map_r_to_xy, mixture_weights
 from .rdmodel import RadiusDensityModel
 from .relationmap import RDRelationMap, RMRelationMap
+from .util import sample_distribution
 
 np.seterr(invalid='ignore')
 
@@ -81,7 +82,7 @@ class RMRelation:
 
 
     def sample(self, quantity: str, radius: oprq = None, mass: oprq = None,
-               mstar: oprq = None, period: oprq = None, ecc: oprq = None,
+               mstar: oprq = None, period: oprq = None, eccentricity: oprq = None,
                nsamples: int = 5000) -> Distribution:
         """
 
@@ -90,21 +91,26 @@ class RMRelation:
         quantity: {'radius', 'density', 'mass', 'k'}
             Returned quantity.
         radius
-            Planet radius either as a single float or as a tuple with radius and its uncertainty.
+            Planet radius in Earth radii.
         mass
-            Planet mass either as a single float or as a tuple with radius and its uncertainty.
+            Planet mass in Earth masses.
         mstar
-            Stellar mass either as a single float or as a tuple with radius and its uncertainty.
+            Stellar mass in Solar masses.
         period
-            Orbital period of the planet either as a single float or as a tuple with radius and its uncertainty.
-        ecc
-            Planet's orbital eccentricity either as a single float or as a tuple with radius and its uncertainty.
+            Orbital period of the planet in days.
+        eccentricity
+            Planet's orbital eccentricity.
         nsamples
             Number of samples to return.
 
+        Notes
+        -----
+        The radius, period, mstar, and eccentricity can be given as floats, tuples of two floats (mean, sigma),
+        uncertainties ufloats, or frozen scipy.stats distributions.
+
         Returns
         -------
-        ndarray
+        Distribution
             Samples from either the density or mass posterior given the planet radius.
         """
         qs = ('radius', 'density', 'mass', 'k', 'rv')
@@ -116,102 +122,109 @@ class RMRelation:
         elif quantity == 'mass':
             return self.predict_mass(radius, nsamples)
         elif quantity in ('k', 'rv'):
-            return self.predict_rv_semi_amplitude(radius, period, mstar, ecc, nsamples)
+            return self.predict_rv_semi_amplitude(radius, period, mstar, eccentricity, nsamples)
         if quantity == 'radius':
             return self.predict_radius(mass, nsamples)
 
     def predict_density(self, radius: prq, nsamples: int = 5000) -> Distribution:
-        """
+        """Predicts the bulk density of the planet given its radius.
 
         Parameters
         ----------
         radius
-            Planet radius either as a ufloat, a single float or as a tuple with radius and its uncertainty.
+            Planet radius in Earth radii. Can be either a float, a tuple of two floats (mean, sigma), an uncertainties
+            ufloat, or a frozen scipy.stats distribution.
         nsamples
             Number of samples to return.
 
         Returns
         -------
-        distribution
-            Predicted bulk density distribution.
+        Distribution
+            Predicted bulk density distribution in g/cm^3.
         """
-        r, re = unpack_value(radius)
-        rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
-        return Distribution(s, 'density', self._identify_modes(r, 'density'))
+        rs, s = self.rdmap.sample(radius, 'rd', nsamples)
+        return Distribution(s, 'density', self._identify_modes(r.mean(), 'density'))
 
     def predict_mass(self, radius: prq, nsamples: int = 5000) -> Distribution:
-        """
+        """Predicts the mass of the planet given its radius.
 
         Parameters
         ----------
         radius
-            Planet radius either as a ufloat, a single float or as a tuple with radius and its uncertainty.
+            Planet radius in Earth radii. Can be either a float, a tuple of two floats (mean, sigma), an uncertainties
+            ufloat, or a frozen scipy.stats distribution.
         nsamples
             Number of samples to return.
 
         Returns
         -------
-        distribution
-            Predicted mass distribution.
+        Distribution
+            Predicted mass distribution in Earth masses.
         """
-        r, re = unpack_value(radius)
-        rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
+        rs, s = self.rdmap.sample(radius, 'rd', nsamples)
         v = 4 / 3 * pi * (rs * u.R_earth).to(u.cm) ** 3
         m_g = v * s * (u.g / u.cm ** 3)
-        return Distribution(m_g.to(u.M_earth).value, 'mass', self._identify_modes(r, 'mass'))
+        return Distribution(m_g.to(u.M_earth).value, 'mass', self._identify_modes(rs.mean(), 'mass'))
 
-    def predict_rv_semi_amplitude(self, radius: prq, period: prq, mstar: prq, ecc: oprq = None, nsamples: int = 5000) -> Distribution:
-        """
+    def predict_rv_semi_amplitude(self, radius, period, mstar, eccentricity=0.0, nsamples: int = 5000) -> Distribution:
+        """Predicts the RV semi-amplitude given planet radius, orbital period, stellar mass, and orbital eccentricity.
 
         Parameters
         ----------
         radius
-            Planet radius either as a ufloat, a single float or as a tuple with radius and its uncertainty.
+            Planet radius in Earth radii.
+        period
+            Plaent's orbital period in days.
+        mstar
+            Mass of the host star in Solar masses.
+        eccentricity
+            Planet's orbital eccentricity.
         nsamples
             Number of samples to return.
 
+        Notes
+        -----
+        The radius, period, mstar, and eccentricity can be given as floats, tuples of two floats (mean, sigma),
+        uncertainties ufloats, or frozen scipy.stats distributions.
+
         Returns
         -------
-        distribution
-            Predicted RV semiamplitude distribution.
+        Distribution
+            Predicted RV semiamplitude distribution in m/s.
         """
-        r, re = unpack_value(radius)
-        rs, s = self.rdmap.sample((r, re), 'rd', nsamples)
+        rs, s = self.rdmap.sample(radius, 'rd', nsamples)
         v = 4 / 3 * pi * (rs * u.R_earth).to(u.cm) ** 3
         mpl = (v * s * (u.g / u.cm ** 3)).to(u.kg)
-        if ecc is None:
-            ecc = zeros(nsamples)
-        else:
-            ecc = normal(*unpack_value(ecc), size=nsamples)
-        mst = (normal(*unpack_value(mstar), size=nsamples) * M_sun).to(u.kg)
-        prd = (normal(*unpack_value(period), size=nsamples) * u.d).to(u.s)
-        k = ((2*pi*G/prd)**(1/3) * mpl / mst**(2/3) * (1/sqrt(1-ecc**2))).value
+
+        ecc = sample_distribution(eccentricity, nsamples)
+        mst = (sample_distribution(mstar, nsamples) * u.M_sun).to(u.kg)
+        prd = (sample_distribution(period, nsamples) * u.d).to(u.s)
+        k = ((2 * pi * G / prd) ** (1 / 3) * mpl / mst ** (2 / 3) * (1 / sqrt(1 - ecc ** 2))).value
         return Distribution(k, 'k', (float(median(k)), None), False)
 
     def predict_radius(self, mass: prq, nsamples: int = 5000) -> Distribution:
-        """
+        """Predicts the radius of the planet given its mass.
 
         Parameters
         ----------
         mass
-            Planet mass either as a ufloat, a single float or as a tuple with radius and its uncertainty.
+            Planet mass in Earth masses. Can be either a float, a tuple of two floats (mean, sigma), an uncertainties
+            ufloat, or a frozen scipy.stats distribution.
         nsamples
             Number of samples to return.
 
         Returns
         -------
         distribution
-            Predicted radius distribution.
+            Predicted radius distribution in Earth radii.
         """
-        m, me = unpack_value(mass)
-        ms, s = self.rmmap.sample((m, me), 'mr', nsamples)
+        ms, s = self.rmmap.sample(mass, 'mr', nsamples)
         return Distribution(s, 'radius', (float(median(s)), None), False)
 
     def predict_class(self, radius, mass=None, max_samples: int = 5000):
         pvs = self.posterior_samples.values[:max_samples]
         ns = pvs.shape[0]
-        r, re = unpack_value(radius)
-        rs = normal(r, re, ns)
+        rs = sample_distribution(radius, ns)
 
         weights = zeros((ns, 3))
         for i, pv in enumerate(pvs):
