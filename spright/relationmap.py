@@ -254,7 +254,7 @@ class RelationMap:
         return vs[m], samples[m]
 
 
-    def plot_map(self, ax=None, cm=None):
+    def plot_map(self, ax=None, cm=None, norm=None):
         """
         Plots the data map.
 
@@ -267,7 +267,7 @@ class RelationMap:
         """
         if ax is None:
             fig, ax = subplots()
-        ax.imshow(self._pmapf.T, origin='lower', aspect='auto', cmap=cm,
+        ax.imshow(self._pmapc.T, origin='lower', aspect='auto', cmap=cm, norm=norm, interpolation='bicubic',
                   extent=(self.x[0], self.x[-1], self.y[0], self.y[-1]))
         setp(ax, xlabel=f"{self.xname} [{self.xunit}]", ylabel=f"{self.yname} [{self.yunit}]")
 
