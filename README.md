@@ -4,9 +4,8 @@
 [![arXiv](http://img.shields.io/badge/arXiv-2311.07255-blue.svg?style=flat)](https://arxiv.org/abs/2311.07255)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10082653.svg)](https://doi.org/10.5281/zenodo.10082653)
 [![Licence](http://img.shields.io/badge/license-GPLv3-blue.svg?style=flat)](http://www.gnu.org/licenses/gpl-3.0.html)
-[![codecov](https://codecov.io/gh/hpparvi/spright/graph/badge.svg?token=N61LF1M8TL)](https://codecov.io/gh/hpparvi/spright)
 
-Spright (/spraɪt/; Parviainen, Luque, and Palle, accepted to MNRAS) is a fast Bayesian radius-density-mass relation for 
+Spright (/spraɪt/; [Parviainen, Luque, and Palle, 2023](https://doi.org/10.1093/mnras/stad3504)) is a fast Bayesian radius-density-mass relation for 
 small planets.  The package allows one to predict planetary masses, densities, and RV semi-amplitudes given the 
 planet's radius or planetary radii given the planet's mass.
 
@@ -53,13 +52,13 @@ and the host star mass.
     from spright import RMRelation 
 
     rmr = RMRelation()
-    mds = rmr.predict_rv_semi_amplitude(radius=(1.8, 0.1), period=2.2, mstar=(0.5, 0.05))
+    mds = rmr.predict_rv_semi_amplitude(radius=(1.8, 0.1), period=2.2, mstar=(0.5, 0.05), eccentricity=0.01)
     mds.plot()
 
 ![Predicted RV semi-amplitude](notebooks/f02_rv_semi_amplitude.svg)
 
 Here the `RMRelation.predict_rv_semi_amplitude` method can also be given the planet's orbital eccentricity (`ecc`), 
-and all the parameters (`radius`, `period`, `mstar`, and `ecc`) can either be floats, ufloats, or two-value tuples where the second value gives
+and all the parameters (`radius`, `period`, `mstar`, and `eccentricity`) can either be floats, ufloats, or two-value tuples where the second value gives
 the parameter uncertainty.
 
 ### Calculation of a new radius-density-mass relation
