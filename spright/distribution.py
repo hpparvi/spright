@@ -73,8 +73,9 @@ class Distribution:
                 s = f"  T(m={p[0]:3.2f}, σ={p[1]:3.2f}, λ={p[2]:3.2f})"
         return c + s
 
-    def _fit_kde(self, bw_fct: float = 1) -> tuple[ndarray, ndarray]:
-        return az.kde(self.samples, adaptive=True, bw_fct=bw_fct)
+    def _fit_kde(self, bw_fct: float = 1, lims=(-inf, inf)) -> tuple[ndarray, ndarray]:
+        m = (self.samples > lims[0]) & (self.samples < lims[1])
+        return az.kde(self.samples[m], adaptive=True, bw_fct=bw_fct)
 
     def _fit_distribution(self, m1: float, m2: Optional[float]) -> tuple[Callable, ndarray, float, Optional[float]]:
         if m2 is None:
@@ -103,10 +104,10 @@ class Distribution:
             self.model, self.model_pars, self._m1, self._m2 = dmodel, res.x, res.x[1], res.x[4]
             return dmodel, res.x, res.x[1], res.x[4]
 
-    def plot(self, plot_model: bool = True, plot_modes: bool = True, ax = None, bw_fct: float = 1):
+    def plot(self, plot_model: bool = True, plot_modes: bool = True, ax = None, bw_fct: float = 1, lims=(-inf, inf)):
         plot_model &= self.model is not None
         ps = percentile(self.samples, [50, 16, 84, 2.5, 97.5])
-        x, y = self._fit_kde(bw_fct=bw_fct)
+        x, y = self._fit_kde(bw_fct=bw_fct, lims=lims)
         il, iu = argmin(abs(x - ps[1])), argmin(abs(x - ps[2]))
         ill, iuu = argmin(abs(x - ps[3])), argmin(abs(x - ps[4]))
 
@@ -132,7 +133,8 @@ class Distribution:
                   'radius': r'Radius [R$_\oplus$]',
                   'k': r'RV semi-amplitude [m/s]'}[self.quantity]
 
-        setp(ax, ylabel='Posterior probability', xlabel=xlabel, yticks=[], xlim=percentile(self.samples, [1, 99]))
+        x1, x2 = percentile(self.samples, [1, 99])
+        setp(ax, ylabel='Posterior probability', xlabel=xlabel, yticks=[], xlim=(max(x1, lims[0]), min(x2, lims[1])))
         if fig is not None:
             fig.tight_layout()
         return ax
