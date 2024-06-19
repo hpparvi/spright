@@ -142,8 +142,8 @@ class RMRelation:
         Distribution
             Predicted bulk density distribution in g/cm^3.
         """
-        rs, s = self.rdmap.sample(radius, 'rd', nsamples)
-        return Distribution(s, 'density', self._identify_modes(r.mean(), 'density'))
+        rs, rho = self.rdmap.sample(radius, 'rd', nsamples)
+        return Distribution(rho, 'density', self._identify_modes(rho.mean(), 'density'))
 
     def predict_mass(self, radius: prq, nsamples: int = 5000) -> Distribution:
         """Predicts the mass of the planet given its radius.
