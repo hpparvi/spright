@@ -1,0 +1,15 @@
+astropy
+numpy
+pytransit
+pandas
+matplotlib
+numba
+scipy
+semantic_version
+uncertainties
+arviz
+spright
+pytest
+seaborn
+plotext
+mpltern
