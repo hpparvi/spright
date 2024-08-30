@@ -108,8 +108,8 @@ class RelationMap:
         yx_icdf : Optional[ndarray], optional
             The inverse cumulative distribution function (ICDF) for the yx relation.
         """
-        self._pmapc = data.copy()
-        self._pmapf = self._pmapc.sum(0)
+        self._pmapc = data.copy()           # Component-wise data as a 3D ndarray
+        self._pmapf = self._pmapc.sum(0)    # Flattened data as a 2D ndarray
         self.x = x.copy()
         self.y = y.copy()
         self.probs = probs.copy()
@@ -267,7 +267,7 @@ class RelationMap:
         """
         if ax is None:
             fig, ax = subplots()
-        ax.imshow(self._pmapc.T, origin='lower', aspect='auto', cmap=cm, norm=norm, interpolation='bicubic',
+        ax.imshow(self._pmapf.T, origin='lower', aspect='auto', cmap=cm, norm=norm, interpolation='bicubic',
                   extent=(self.x[0], self.x[-1], self.y[0], self.y[-1]))
         setp(ax, xlabel=f"{self.xname} [{self.xunit}]", ylabel=f"{self.yname} [{self.yunit}]")
 
