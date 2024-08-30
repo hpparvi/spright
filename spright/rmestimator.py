@@ -192,10 +192,10 @@ class RMEstimator:
         rdh.header['CREATED'] = Time.now().to_value('fits', 'date')
 
         # Catalog
-        tbs = Table(data=[self.planet_names.astype('a20'),
-                          self.radius_means, self.radius_uncertainties,
-                          self.mass_means, self.mass_uncertainties,
-                          self.density_means, self.density_uncertainties],
+        tbs = Table(data=[self.planet_names.astype(str),
+                          self.radius_means.astype('d'), self.radius_uncertainties.astype('d'),
+                          self.mass_means.astype('d'), self.mass_uncertainties.astype('d'),
+                          self.density_means.astype('d'), self.density_uncertainties.astype('d')],
                     names=['name', 'radius', 'radius_e', 'mass', 'mass_e', 'density', 'density_e'],
                     units=[None, 'R_Earth', 'R_Earth', 'M_Earth', 'M_Earth', 'g cm^-3', 'g cm^-3'])
         cat = pf.BinTableHDU(tbs, name='catalog')
