@@ -212,13 +212,18 @@ class RMEstimator:
         filename = filename or Path('rdmap.fits')
         hdul.writeto(filename, overwrite=True)
 
-
     def plot_radius_density(self, pv=None, rhores: int = 200, radres: int = 200, ax=None,
-                            max_samples: int = 500, cmap=None, components=None, plot_contours=False):
-        arho = linspace(0, 15, rhores)
-        arad = linspace(0.5, 5.5, radres)
-        xrho, xrad = meshgrid(arho, arad)
+                            max_samples: int = 500, cmap=None, components=None, plot_contours: bool = False,
+                            rholim: tuple[float, float] = (0, 15), radlim: tuple[float, float] =(0.5, 5.5)):
 
+        if ax is None:
+            fig, ax = subplots()
+        else:
+            fig = ax.figure
+
+        arho = linspace(*rholim, num=rhores)
+        arad = linspace(*radlim, num=radres)
+        xrad, xrho = meshgrid(arad, arho)
         if pv is None:
             if self.lpf.sampler is not None:
                 pv = self.lpf.sampler.chain[:, :, :].reshape([-1, self.lpf._ndim])
@@ -228,43 +233,32 @@ class RMEstimator:
                 raise ValueError('Need to give a parameter vector (population)')
 
         components = asarray(components) if components is not None else ones(4)
-        pdf = zeros((rhores, radres, 3))
+        pdf = zeros((3, rhores, radres))
         rd = self.lpf.rdm
 
         if pv.ndim == 1:
-            for i in range(3):
-                if components[i] != 0:
-                    cs = zeros(3)
-                    cs[i] = 1.0
-                    pdf[:, :, i] = model(xrho.ravel(), xrad.ravel(), pv, cs,
-                                         rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
-                                         rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(xrho.shape).T
+            pdf[:, :, :] = model(xrho.ravel(), xrad.ravel(), pv, components,
+                                 rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                                 rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(pdf.shape)
         else:
-            for i in range(3):
-                if components[i] != 0:
-                    cs = zeros(3)
-                    cs[i] = 1.0
-                    m = array([model(xrho.ravel(), xrad.ravel(), x, cs,
-                                     rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
-                                     rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(xrho.shape) for x in
-                               permutation(pv)[:max_samples]])
-                    pdf[:, :, i] = m.mean(0).T
+            ns = min(pv.shape[0], max_samples)
+            for x in permutation(pv)[:ns]:
+                pdf += model(xrho.ravel(), xrad.ravel(), x, components,
+                             rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
+                             rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(pdf.shape)
+                pdf /= ns
 
-        fig = None
-        if ax is None:
-            fig, ax = subplots()
-
-        ax.imshow(pdf.mean(-1), extent=(0.5, 5.5, 0.0, 15), origin='lower', cmap=cmap, aspect='auto')
+        ax.imshow(pdf.mean(0), extent=(radlim[0], radlim[1], rholim[0], rholim[1]), origin='lower', cmap=cmap, aspect='auto')
 
         if plot_contours:
             quantiles = (0.5,)
             levels = []
             for i in range(3):
-                rs = sort(pdf[:, :, i].ravel())
+                rs = sort(pdf[i, :, :].ravel())
                 crs = rs.cumsum()
                 levels.append([rs[argmin(abs(crs / crs[-1] - (1.0 - q)))] for q in quantiles])
             for i in range(3):
-                ax.contour(pdf[:, :, i], extent=(0.5, 5.5, 0.0, 15), levels=levels[i], colors='w')
+                ax.contour(pdf[i, :, :], extent=(radlim[0], radlim[1], rholim[0], rholim[1]), levels=levels[i], colors='w')
 
         rhom, rhoe = self.lpf.density_samples.mean(0), self.lpf.density_samples.std(0)
         ax.errorbar(self.radius_means, rhom, xerr=self.radius_uncertainties, yerr=rhoe, fmt='ow', alpha=0.5)
