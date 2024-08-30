@@ -246,7 +246,7 @@ class RMEstimator:
                 pdf += model(xrho.ravel(), xrad.ravel(), x, components,
                              rd._rr0, rd._rdr, rd._rx0, rd._rdx, rd.drocky,
                              rd._wr0, rd._wdr, rd._wx0, rd._wdx, rd.dwater).reshape(pdf.shape)
-                pdf /= ns
+            pdf /= ns
 
         ax.imshow(pdf.mean(0), extent=(radlim[0], radlim[1], rholim[0], rholim[1]), origin='lower', cmap=cmap, aspect='auto')
 
