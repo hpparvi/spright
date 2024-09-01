@@ -51,12 +51,12 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
 def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
     df = pd.read_csv(fname)
     df.dropna(subset=['radius', 'radius_error_min', 'mass', 'mass_error_min', 'orbital_period'], inplace=True)
-    df = df[(df.planet_status == 'Confirmed') & (df.orbital_period < 10)]
+    df = df[(df.planet_status == 'Confirmed')]
     r = (df.radius.values*R_jup).to(R_earth).value
     rerr = (df[['radius_error_min', 'radius_error_max']].mean(1).values * R_jup).to(R_earth).value
     m = (df.mass.values*M_jup).to(M_earth).value
     merr = (df[['mass_error_min', 'mass_error_max']].mean(1).values * M_jup).to(M_earth).value
-    df = pd.DataFrame(transpose([df['System'].values, r, rerr, m, merr, df['Period(day)'], df.M_A, df.Teff, df.Teq]),
+    df = pd.DataFrame(transpose([df.name.values, r, rerr, m, merr, df.orbital_period, df.star_mass, df.star_teff, df.temp_calculated]),
                       columns='name r rerr m merr period mstar teff teq'.split())
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
     return df
