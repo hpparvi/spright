@@ -54,7 +54,11 @@ class RMRelation:
               'tepcat_m_a21': 'tepcat_m_a21.fits',
               'tepcat_fgk': 'tepcat_fgk_z19.fits',
               'tepcat_fgk_z19': 'tepcat_fgk_z19.fits',
-              'tepcat_fgk_a21': 'tepcat_fgk_a21.fits'}
+              'tepcat_fgk_a21': 'tepcat_fgk_a21.fits',
+              'exoeu_m_z19': 'exoeu_m_z19.fits',
+              'exoeu_m_a21': 'exoeu_m_a21.fits',
+              'exoeu_fgk_z19': 'exoeu_fgk_z19.fits',
+              'exoeu_fgk_a21': 'exoeu_fgk_a21.fits'}
 
     def __init__(self, fname: Optional[Union[str, Path]] = None):
         """
