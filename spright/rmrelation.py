@@ -48,6 +48,14 @@ class RMRelation:
 
     """
 
+    models = {'stpm': 'stpm.fits',
+              'tepcat_m': 'tepcat_m_z19.fits',
+              'tepcat_m_z19': 'tepcat_m_z19.fits',
+              'tepcat_m_a21': 'tepcat_m_a21.fits',
+              'tepcat_fgk': 'tepcat_fgk_z19.fits',
+              'tepcat_fgk_z19': 'tepcat_fgk_z19.fits',
+              'tepcat_fgk_a21': 'tepcat_fgk_a21.fits'}
+
     def __init__(self, fname: Optional[Union[str, Path]] = None):
         """
         Parameters
@@ -57,19 +65,9 @@ class RMRelation:
         """
 
         self.rdm = RadiusDensityModel()
-        if fname is None:
-            fname = Path(__file__).parent / 'data' / 'stpm.fits'
-        elif Path(fname).exists():
-            fname = Path(fname)
-        elif isinstance(fname, str):
-            if fname.lower() == 'stpm':
-                fname = Path(__file__).parent / 'data' / 'stpm.fits'
-            elif fname.lower() == 'tepcat_m':
-                fname = Path(__file__).parent / 'data' / 'tepcat_m.fits'
-            elif fname.lower() == 'tepcat_fgk':
-                fname = Path(__file__).parent / 'data' / 'tepcat_fgk.fits'
-            else:
-                raise ValueError()
+
+        if fname is None or not Path(fname).exists():
+            fname = Path(__file__).parent / 'data' / self.models[fname or 'stpm']
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UnitsWarning)
@@ -79,7 +77,6 @@ class RMRelation:
                 self.posterior_samples = Table.read(fname, 10).to_pandas()
                 self.catalog = Table.read(fname, 11).to_pandas()
                 self.rdsamples = Table.read(fname, 12).to_pandas()
-
 
     def sample(self, quantity: str, radius: oprq = None, mass: oprq = None,
                mstar: oprq = None, period: oprq = None, eccentricity: oprq = None,
