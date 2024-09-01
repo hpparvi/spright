@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-from astropy import units as u
-from numpy import ones
+from astropy.units.astrophys import M_jup, M_earth, R_jup, R_earth
+from numpy import ones, transpose
 
 
 def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional[bool] = False):
@@ -30,14 +30,33 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
         return planet_names, [radius_means, radius_uncertainties], [mass_means, mass_uncertainties]
 
 
-def read_tepcat(fname: Path):
-    df = pd.read_csv(fname, delim_whitespace=True)
+def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+    df = pd.read_csv(fname)
+    df = df[(df.M_b > 0.0) & (df.Type != 'BD')]
     ix = df.columns.get_loc('R_b')
-    r = (df['R_b'].values*u.R_jup).to(u.R_earth).value
-    rerr = (df.iloc[:, ix + 1: ix + 3].mean(1).values*u.R_jup).to(u.R_earth).value
+    r = (df['R_b'].values*R_jup).to(R_earth).value
+    rerr = (df.iloc[:, ix + 1: ix + 3].mean(1).values*R_jup).to(R_earth).value
 
     ix = df.columns.get_loc('M_b')
-    m = (df['M_b'].values*u.M_jup).to(u.M_earth).value
-    merr = (df.iloc[:, ix + 1: ix + 3].mean(1).values*u.M_jup).to(u.M_earth).value
+    m = (df['M_b'].values*M_jup).to(M_earth).value
+    merr = (df.iloc[:, ix + 1: ix + 3].mean(1).values*M_jup).to(M_earth).value
+    l = (merr > 0.0) & (rerr > 0.0)
+    df = df[l]
+    df = pd.DataFrame(transpose([df['System'].values, r[l], rerr[l], m[l], merr[l], df.M_A, df.Teff, df.Teq]),
+                      columns='name r rerr m merr mstar teff teq'.split())
+    df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
+    return df
 
-    return df['System'].values, (r, rerr), (m, merr)
+
+def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+    df = pd.read_csv(fname)
+    df.dropna(subset=['radius', 'radius_error_min', 'mass', 'mass_error_min', 'orbital_period'], inplace=True)
+    df = df[(df.planet_status == 'Confirmed') & (df.orbital_period < 10)]
+    r = (df.radius.values*R_jup).to(R_earth).value
+    rerr = (df[['radius_error_min', 'radius_error_max']].mean(1).values * R_jup).to(R_earth).value
+    m = (df.mass.values*M_jup).to(M_earth).value
+    merr = (df[['mass_error_min', 'mass_error_max']].mean(1).values * M_jup).to(M_earth).value
+    df = pd.DataFrame(transpose([df['System'].values, r, rerr, m, merr, df['Period(day)'], df.M_A, df.Teff, df.Teq]),
+                      columns='name r rerr m merr period mstar teff teq'.split())
+    df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
+    return df
