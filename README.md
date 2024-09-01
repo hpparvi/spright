@@ -4,7 +4,10 @@
 [![arXiv](http://img.shields.io/badge/arXiv-2311.07255-blue.svg?style=flat)](https://arxiv.org/abs/2311.07255)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10082653.svg)](https://doi.org/10.5281/zenodo.10082653)
 [![Licence](http://img.shields.io/badge/license-GPLv3-blue.svg?style=flat)](http://www.gnu.org/licenses/gpl-3.0.html)
+![Python package](https://github.com/hpparvi/spright/actions/workflows/python-package.yml/badge.svg)
+[![PyPI version](https://badge.fury.io/py/spright.svg)](https://badge.fury.io/py/spright)
 [![codecov](https://codecov.io/gh/hpparvi/spright/graph/badge.svg?token=N61LF1M8TL)](https://codecov.io/gh/hpparvi/spright)
+[![astropy](http://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat)](http://www.astropy.org/)
 
 Spright (/spraɪt/; [Parviainen, Luque, and Palle, 2023](https://doi.org/10.1093/mnras/stad3504)) is a fast Bayesian radius-density-mass relation for 
 small planets.  The package allows one to predict planetary masses, densities, and RV semi-amplitudes given the 
