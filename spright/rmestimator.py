@@ -36,8 +36,39 @@ from .lpf import LPF
 
 
 class RMEstimator:
-    """A class that computes a numerical radius-density relation.
+    """Estimates a numerical radius-density-mass relation from a sample of planets.
 
+    The estimator models the planet population as a mixture of three components (rocky planets, water worlds, and
+    sub-Neptunes) with radius-dependent mixture weights, infers the mixture model parameters from a catalogue of
+    planet radius and mass (or density) measurements, and evaluates the posterior predictive distributions as
+    numerical radius-density and radius-mass relation maps.
+
+    The standard workflow is to optimize the model parameters globally, sample the parameter posterior using MCMC,
+    compute the relation maps, and save the maps into a FITS file that can be read by `RMRelation`.
+
+    Attributes
+    ----------
+    planet_names: ndarray
+        Names of the planets in the sample.
+    nplanets: int
+        Number of planets in the sample.
+    nsamples: int
+        Number of samples drawn per planet.
+    radius_samples: ndarray
+        Planet radius samples in Earth radii with a shape [nsamples, nplanets].
+    mass_samples: ndarray
+        Planet mass samples in Earth masses with a shape [nsamples, nplanets]. Set to NaN if the estimator was
+        initialised with densities rather than masses.
+    density_samples: ndarray
+        Planet bulk density samples in g/cm^3 with a shape [nsamples, nplanets].
+    rdmodel: RadiusDensityModel
+        Theoretical radius-density models for rocky planets and water worlds.
+    lpf: LPF
+        Log posterior function used in the optimization and sampling.
+    rdmap: Optional[RDRelationMap]
+        Numerical radius-density relation map. Created by `compute_maps`.
+    rmmap: Optional[RMRelationMap]
+        Numerical radius-mass relation map. Created by `compute_maps`.
     """
     def __init__(self, nsamples: int = 50,
                  names: Optional[ndarray] = None,
@@ -47,6 +78,31 @@ class RMEstimator:
                  rock: str = 'z19',
                  water: str = 'z19',
                  seed: Optional[int] = None):
+        """
+        Parameters
+        ----------
+        nsamples
+            Number of samples to draw from each planet's radius and mass (or density) measurement.
+        names
+            Planet names.
+        radii
+            Planet radii in Earth radii as a tuple of (means, uncertainties) arrays.
+        masses
+            Planet masses in Earth masses as a tuple of (means, uncertainties) arrays.
+        densities
+            Planet bulk densities in g/cm^3 as a tuple of (means, uncertainties) arrays.
+        rock
+            Theoretical radius-density model to use for rocky planets.
+        water
+            Theoretical radius-density model to use for water-rich planets.
+        seed
+            Seed for the random number generator used to create the samples.
+
+        Notes
+        -----
+        Either the masses or the densities need to be given. If both are given, the masses take precedence and the
+        densities are ignored.
+        """
 
         self.radius_means: Optional[ndarray] = None
         self.radius_uncertainties: Optional[ndarray] = None
@@ -79,6 +135,21 @@ class RMEstimator:
                    radii: tuple[ndarray, ndarray],
                    masses: tuple[ndarray, ndarray],
                    densities: tuple[ndarray, ndarray]):
+        """Stores the planet names and the radius and mass (or density) measurements.
+
+        Parameters
+        ----------
+        names
+            Planet names.
+        radii
+            Planet radii in Earth radii as a tuple of (means, uncertainties) arrays.
+        masses
+            Planet masses in Earth masses as a tuple of (means, uncertainties) arrays. Can be None if the densities
+            are given.
+        densities
+            Planet bulk densities in g/cm^3 as a tuple of (means, uncertainties) arrays. Used only if the masses are
+            not given.
+        """
         self.planet_names = names
         self.radius_means, self.radius_uncertainties = radii
         if masses is not None:
@@ -88,6 +159,19 @@ class RMEstimator:
         self.nplanets = self.planet_names.size
 
     def _create_samples(self, nsamples: int):
+        """Creates the radius, mass, and density samples used in the inference.
+
+        Draws `nsamples` samples per planet from a normal distribution defined by the measurement mean and
+        uncertainty, clipping the samples to non-negative values. If the estimator was initialised with masses, the
+        densities are computed from the radius and mass samples and the density means and uncertainties are set to
+        the sample means and standard deviations. If it was initialised with densities, the mass samples are set to
+        NaN.
+
+        Parameters
+        ----------
+        nsamples
+            Number of samples to draw per planet.
+        """
         seed(self.seed)
         self.nsamples = nsamples
         self.radius_samples = r = zeros((nsamples, self.nplanets))
@@ -107,16 +191,65 @@ class RMEstimator:
                 self.density_samples[:, i] = clip(normal(self.density_means[i], self.density_uncertainties[i], size=nsamples), 0, inf)
 
     def add_lnprior(self, lnprior):
+        """Adds an additional log prior to the log posterior function.
+
+        Parameters
+        ----------
+        lnprior
+            A callable that takes an array of parameter vectors and returns their log prior probabilities.
+        """
         self.lpf._additional_log_priors.append(lnprior)
 
     def model(self, rho, radius, pv, components = None):
+        """Evaluates the analytical radius-density mixture model.
+
+        Parameters
+        ----------
+        rho
+            Bulk densities to evaluate the model at in g/cm^3.
+        radius
+            Planet radii to evaluate the model at in Earth radii.
+        pv
+            Model parameter vector.
+        components
+            Weights for the three model components. Defaults to equal weights.
+
+        Returns
+        -------
+        ndarray
+            Model probability densities with a shape [3, npt] where the first axis corresponds to the rocky planet,
+            water world, and sub-Neptune components.
+        """
         return self.lpf.model(rho, radius, pv, ones(3) if components is None else components)
 
     def optimize(self, niter: int = 500, npop: int = 150):
+        """Optimizes the model parameters globally using Differential Evolution.
+
+        Parameters
+        ----------
+        niter
+            Number of Differential Evolution iterations.
+        npop
+            Size of the parameter vector population.
+        """
         self.lpf.optimize_global(niter, npop, plot_convergence=False)
         self._optimization_result = self.lpf.de.minimum_location.copy()
 
     def sample(self, niter: int = 500, thin: int = 5, repeats: int = 1, population=None):
+        """Samples the model parameter posterior using emcee.
+
+        Parameters
+        ----------
+        niter
+            Number of MCMC iterations per repeat.
+        thin
+            Thinning factor.
+        repeats
+            Number of times the sampling is repeated, each repeat continuing from the end of the previous one.
+        population
+            Initial parameter vector population. If None, the population is taken from the end of the previous MCMC
+            run if one exists, and from the global optimization otherwise.
+        """
         if population is None:
             if self.lpf.sampler is None:
                 population = self.lpf.de.population.copy()
@@ -125,6 +258,20 @@ class RMEstimator:
         self.lpf.sample_mcmc(niter, thin, repeats, population.shape[0], population=population, save=False, vectorize=True)
 
     def posterior_samples(self, burn: int = 0, thin: int = 1):
+        """Returns the model parameter posterior samples.
+
+        Parameters
+        ----------
+        burn
+            Number of samples to discard from the beginning of each chain.
+        thin
+            Thinning factor.
+
+        Returns
+        -------
+        DataFrame
+            Posterior samples with one column per model parameter.
+        """
         return self.lpf.posterior_samples(burn, thin)
 
     def compute_maps(self, nsamples: int = 1500,
@@ -133,6 +280,30 @@ class RMEstimator:
                      dlims: tuple[float, float] = (0, 12),
                      mlims: tuple[float, float] = (0, 25),
                      rseed: int = 0):
+        """Computes the numerical radius-density and radius-mass relation maps.
+
+        Averages the analytical model over a random subset of the parameter posterior samples to create the numerical
+        radius-density and radius-mass probability maps, and stores them in `rdmap` and `rmmap`.
+
+        Parameters
+        ----------
+        nsamples
+            Number of posterior samples to average the model over.
+        rres
+            Radius resolution of the maps.
+        dres
+            Density resolution of the radius-density map and mass resolution of the radius-mass map.
+        pres
+            Probability resolution of the inverse CDFs.
+        rlims
+            Radius limits of the maps in Earth radii.
+        dlims
+            Density limits of the radius-density map in g/cm^3.
+        mlims
+            Mass limits of the radius-mass map in Earth masses.
+        rseed
+            Seed for the random number generator used to choose the posterior samples.
+        """
         seed(rseed)
         rd = self.rdmodel
         df = self.lpf.posterior_samples()
@@ -143,6 +314,24 @@ class RMEstimator:
         self.rmmap = RMRelationMap(rmm, radii, masses, pres)
 
     def save(self, filename: Optional[Path] = None):
+        """Saves the relation maps, posterior samples, and the planet catalogue into a FITS file.
+
+        Parameters
+        ----------
+        filename
+            Name of the FITS file to write the relation into. Defaults to 'rdmap.fits'.
+
+        Raises
+        ------
+        ValueError
+            If called before the parameter posterior has been sampled and the maps computed.
+
+        Notes
+        -----
+        The order of the HDUs is a part of the file format: `RMRelation` reads the posterior samples, the catalogue,
+        and the radius-mass-density samples by their HDU index. Adding, removing, or reordering the HDUs here
+        requires a matching change in `RMRelation.__init__`.
+        """
         if self.lpf.sampler is None or self.rdmap is None:
             raise ValueError("Cannot save before computing the maps")
 
@@ -166,6 +355,7 @@ class RMEstimator:
         p = self.rdmap.probs
 
         def set_axes(h, xname, yname, x, y):
+            """Writes the WCS keywords describing the two image axes into an HDU header."""
             h.header['CTYPE1'] = yname
             h.header['CRPIX1'] = 1
             h.header['CRVAL1'] = y[0]
@@ -215,7 +405,45 @@ class RMEstimator:
     def plot_radius_density(self, pv=None, rhores: int = 200, radres: int = 200, ax=None,
                             max_samples: int = 500, cmap=None, components=None, plot_contours: bool = False,
                             rholim: tuple[float, float] = (0, 15), radlim: tuple[float, float] =(0.5, 5.5)):
+        """Plots the radius-density model as a two-dimensional probability map.
 
+        Plots the model averaged over the parameter vectors together with the radius and density measurements the
+        relation was inferred from.
+
+        Parameters
+        ----------
+        pv
+            Parameter vector or a population of parameter vectors. If None, the MCMC chain is used if one exists,
+            and the global optimization result otherwise.
+        rhores
+            Density resolution of the plotted map.
+        radres
+            Radius resolution of the plotted map.
+        ax
+            Matplotlib axes to plot into. If None, a new figure and axes are created.
+        max_samples
+            Maximum number of parameter vectors to average the model over.
+        cmap
+            Matplotlib colormap.
+        components
+            Weights for the three model components. Defaults to equal weights.
+        plot_contours
+            Whether to plot the 50% probability contour for each component.
+        rholim
+            Density limits in g/cm^3.
+        radlim
+            Radius limits in Earth radii.
+
+        Returns
+        -------
+        Axes
+            Matplotlib axes the model was plotted into.
+
+        Raises
+        ------
+        ValueError
+            If `pv` is None and the model has been neither optimized nor sampled.
+        """
         if ax is None:
             fig, ax = subplots()
         else:
