@@ -1,1 +1,2 @@
-include moot/data/*
+prune notebooks
+prune .idea

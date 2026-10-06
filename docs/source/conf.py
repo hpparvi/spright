@@ -6,10 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+from importlib import metadata
+
 project = 'Spright'
 copyright = '2023, Hannu Parviainen'
 author = 'Hannu Parviainen'
-release = '2023.10.29'
+release = metadata.version('spright')
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
