@@ -28,18 +28,49 @@ np.seterr(invalid='ignore')
 
 
 class Distribution:
-    """Mass or density distribution.
+    """Posterior distribution of a predicted planet property.
 
+    Stores the samples of a predicted density, mass, radius, or RV semi-amplitude, and
+    optionally approximates the distribution with a uni- or bimodal Student's
+    t-distribution model.
+
+    Parameters
+    ----------
+    samples : ndarray
+        Samples drawn from the distribution.
+    quantity : {'density', 'mass', 'radius', 'k'}
+        Quantity the samples represent, where ``'k'`` stands for the RV semi-amplitude.
+    modes : tuple of (float, float or None)
+        Initial guesses for the locations of the two distribution modes. The distribution
+        is treated as unimodal if the second element is ``None``.
+    fit : bool, optional
+        Whether to fit the Student's t-distribution model to the samples.
 
     Attributes
     ----------
-    quantity: {'density', 'mass', 'radius', 'k'}
-        Stored quantity
-    samples: ndarray
-        Array of samples
-    size: int
-        Number of samples
+    quantity : {'density', 'mass', 'radius', 'k'}
+        Stored quantity.
+    samples : ndarray
+        Array of samples.
+    size : int
+        Number of samples.
+    units : str
+        Units of the stored quantity.
+    is_bimodal : bool
+        Whether the distribution is modelled as bimodal.
+    model : callable or None
+        Fitted distribution model with a signature ``model(x, pv)``, or ``None`` if the
+        model has not been fitted.
+    model_pars : ndarray or None
+        Fitted model parameters. These are ``[m, s, l]`` for a unimodal model and
+        ``[w, m1, s1, l1, m2, s2, l2]`` for a bimodal model, where ``m`` is the location,
+        ``s`` is the scale, ``l`` is the degrees of freedom, and ``w`` is the weight of
+        the second mode.
 
+    Raises
+    ------
+    ValueError
+        If ``quantity`` is not one of the supported quantities.
     """
 
     _quantities = ('density', 'mass', 'radius', 'k')
@@ -74,10 +105,11 @@ class Distribution:
             self._fit_distribution(*modes)
 
     def __repr__(self):
+        """Summarise the distribution and the fitted distribution model."""
         p = self.model_pars
         c = (f"{self.quantity.capitalize()} distribution\nsize: {self.size}\nis bimodal: {self.is_bimodal}\n\n"
              f"Median: {median(self.samples):4.2f},\n"
-             f"64% limits: {percentile(self.samples, [16,84]).round(1)},\n"
+             f"68% limits: {percentile(self.samples, [16,84]).round(1)},\n"
              f"95% limits: {percentile(self.samples, [2.5,97.5]).round(1)}\n\n"
              f"Distribution model:\n")
 
@@ -90,10 +122,57 @@ class Distribution:
         return c + s
 
     def _fit_kde(self, bw_fct: float = 1, lims=(-inf, inf)) -> tuple[ndarray, ndarray]:
+        """Estimate the probability density of the samples using an adaptive KDE.
+
+        Parameters
+        ----------
+        bw_fct : float, optional
+            Bandwidth multiplier. Values larger than one give a smoother estimate.
+        lims : tuple of (float, float), optional
+            Lower and upper limits for the samples included in the estimate.
+
+        Returns
+        -------
+        x : ndarray
+            Grid over which the density is evaluated.
+        y : ndarray
+            Estimated probability density.
+        """
         m = (self.samples > lims[0]) & (self.samples < lims[1])
         return az.kde(self.samples[m], adaptive=True, bw_fct=bw_fct)
 
     def _fit_distribution(self, m1: float, m2: Optional[float]) -> tuple[Callable, ndarray, float, Optional[float]]:
+        """Fit a uni- or bimodal Student's t-distribution model to the samples.
+
+        The model is fitted by maximising the likelihood with Powell's method, and the
+        results are stored in the ``model`` and ``model_pars`` attributes.
+
+        Parameters
+        ----------
+        m1 : float
+            Initial guess for the location of the first mode.
+        m2 : float or None
+            Initial guess for the location of the second mode. A unimodal model is fitted
+            if ``None``.
+
+        Returns
+        -------
+        model : callable
+            Distribution model with a signature ``model(x, pv)``.
+        pv : ndarray
+            Fitted model parameters (see the ``model_pars`` attribute).
+        m1 : float
+            Location of the first mode.
+        m2 : float or None
+            Location of the second mode, or ``None`` for a unimodal model.
+
+        Notes
+        -----
+        All the model parameters are constrained to be non-negative and the degrees of
+        freedom to be at most seven. The bimodal model additionally requires the weight
+        of the second mode to be at most one and the first mode to be located below the
+        second one.
+        """
         if m2 is None:
             def dmodel(x, pv):
                 return spdf(x, *pv)
@@ -104,8 +183,8 @@ class Distribution:
                 return -log(dmodel(self.samples, pv)).sum() / self.size
 
             self._minimization_result = res = minimize(minfun, array([m1, 0.1, 1.0]), method='powell')
-            self.model, self.model_pars, self._m1, self._m2 = dmodel, res.x, res.x[1], None
-            return dmodel, res.x, res.x[1], None
+            self.model, self.model_pars, self._m1, self._m2 = dmodel, res.x, res.x[0], None
+            return dmodel, res.x, res.x[0], None
         else:
             def dmodel(x, pv):
                 return (1 - pv[0]) * spdf(x, *pv[1:4]) + pv[0] * spdf(x, *pv[4:])
@@ -121,6 +200,30 @@ class Distribution:
             return dmodel, res.x, res.x[1], res.x[4]
 
     def plot(self, plot_model: bool = True, plot_modes: bool = True, ax = None, bw_fct: float = 1, lims=(-inf, inf)):
+        """Plot the distribution.
+
+        Plots a kernel density estimate of the samples with the central 68% and 95%
+        intervals shaded.
+
+        Parameters
+        ----------
+        plot_model : bool, optional
+            Whether to plot the fitted distribution model. Ignored if the model has not
+            been fitted.
+        plot_modes : bool, optional
+            Whether to mark the mode locations of the fitted distribution model.
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot into. A new figure is created if ``None``.
+        bw_fct : float, optional
+            Bandwidth multiplier for the kernel density estimate.
+        lims : tuple of (float, float), optional
+            Lower and upper limits for the plotted quantity.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            Axes containing the plot.
+        """
         plot_model &= self.model is not None
         ps = percentile(self.samples, [50, 16, 84, 2.5, 97.5])
         x, y = self._fit_kde(bw_fct=bw_fct, lims=lims)
