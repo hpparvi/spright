@@ -23,6 +23,33 @@ from numpy import ones, transpose
 
 
 def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional[bool] = False):
+    """Read a small transiting planets around M dwarfs (STPM) catalogue.
+
+    Parameters
+    ----------
+    fname : Path
+        Path to the catalogue CSV file.
+    mask_bad : bool, optional
+        If ``True``, include only the planets with a relative mass uncertainty of 25% or
+        smaller and a relative radius uncertainty of 8% or smaller.
+    return_rho : bool, optional
+        If ``True``, return the planet bulk densities instead of the planet masses.
+
+    Returns
+    -------
+    names : ndarray
+        Planet names.
+    radii : list of ndarray
+        Planet radii and their uncertainties [R_earth].
+    masses or densities : list of ndarray
+        Planet masses and their uncertainties [M_earth], or planet bulk densities and
+        their uncertainties [g/cm^3] if ``return_rho`` is ``True``.
+
+    Notes
+    -----
+    The uncertainties are the means of the lower and upper uncertainties given in the
+    catalogue.
+    """
     df = pd.read_csv(fname)
     df['eM_relative'] = 0.5*(df.euM_Mterra + df.edM_Mterra)/df.M_Mterra
     df['eR_relative'] = 0.5*(df.euR_Rterra + df.edR_Rterra)/df.R_Rterra
@@ -47,6 +74,32 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
 
 
 def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+    """Read a TEPCat catalogue.
+
+    Reads the catalogue, converts the planet radii and masses from Jupiter to Earth
+    units, and removes the brown dwarfs, the planets without a mass or radius estimate,
+    and the planets with too uncertain a mass or radius.
+
+    Parameters
+    ----------
+    fname : Path
+        Path to the catalogue CSV file.
+    max_rel_r_err : float, optional
+        Maximum allowed relative radius uncertainty.
+    max_rel_m_err : float, optional
+        Maximum allowed relative mass uncertainty.
+
+    Returns
+    -------
+    DataFrame
+        Catalogue with the columns ``name``, ``r`` and ``rerr`` [R_earth], ``m`` and
+        ``merr`` [M_earth], ``mstar`` [M_sun], ``teff`` [K], and ``teq`` [K].
+
+    Notes
+    -----
+    The uncertainties are the means of the lower and upper uncertainties given in the
+    catalogue.
+    """
     df = pd.read_csv(fname)
     df = df[(df.M_b > 0.0) & (df.Type != 'BD')]
     ix = df.columns.get_loc('R_b')
@@ -60,11 +113,40 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     df = df[l]
     df = pd.DataFrame(transpose([df['System'].values, r[l], rerr[l], m[l], merr[l], df.M_A, df.Teff, df.Teq]),
                       columns='name r rerr m merr mstar teff teq'.split())
+    numeric_columns = df.columns.drop('name')
+    df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
     return df
 
 
 def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+    """Read an Exoplanet.eu catalogue.
+
+    Reads the catalogue, converts the planet radii and masses from Jupiter to Earth
+    units, and removes the unconfirmed planets, the planets without a radius, mass, or
+    orbital period estimate, and the planets with too uncertain a mass or radius.
+
+    Parameters
+    ----------
+    fname : Path
+        Path to the catalogue CSV file.
+    max_rel_r_err : float, optional
+        Maximum allowed relative radius uncertainty.
+    max_rel_m_err : float, optional
+        Maximum allowed relative mass uncertainty.
+
+    Returns
+    -------
+    DataFrame
+        Catalogue with the columns ``name``, ``r`` and ``rerr`` [R_earth], ``m`` and
+        ``merr`` [M_earth], ``period`` [d], ``mstar`` [M_sun], ``teff`` [K], and
+        ``teq`` [K].
+
+    Notes
+    -----
+    The uncertainties are the means of the lower and upper uncertainties given in the
+    catalogue.
+    """
     df = pd.read_csv(fname)
     df.dropna(subset=['radius', 'radius_error_min', 'mass', 'mass_error_min', 'orbital_period'], inplace=True)
     df = df[(df.planet_status == 'Confirmed')]
@@ -74,5 +156,7 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     merr = (df[['mass_error_min', 'mass_error_max']].mean(1).values * M_jup).to(M_earth).value
     df = pd.DataFrame(transpose([df.name.values, r, rerr, m, merr, df.orbital_period, df.star_mass, df.star_teff, df.temp_calculated]),
                       columns='name r rerr m merr period mstar teff teq'.split())
+    numeric_columns = df.columns.drop('name')
+    df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
     return df
