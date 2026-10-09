@@ -23,7 +23,7 @@ import astropy.units as u
 import pandas as pd
 from astropy.coordinates import SkyCoord, search_around_sky
 from astropy.units.astrophys import M_jup, M_earth, R_jup, R_earth
-from numpy import ones, transpose, arange, argsort, isfinite
+from numpy import ones, transpose, arange, argsort, asarray, isfinite
 
 from .core import root
 
@@ -33,7 +33,39 @@ _catalog_files = {'stpm': root / 'data/stpm_230202.csv',
                   'exoplanet_eu': root / 'data/exoplanet_eu.csv'}
 
 
-def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional[bool] = False):
+def _teff_mask(teff, min_teff: Optional[float], max_teff: Optional[float]):
+    """Select the rows whose host star effective temperature is inside the given limits.
+
+    Parameters
+    ----------
+    teff : array_like
+        Host star effective temperatures [K].
+    min_teff : float or None
+        Minimum effective temperature [K], inclusive. No lower limit if ``None``.
+    max_teff : float or None
+        Maximum effective temperature [K], inclusive. No upper limit if ``None``.
+
+    Returns
+    -------
+    ndarray
+        Boolean mask selecting the rows inside the limits.
+
+    Notes
+    -----
+    A row without an effective temperature estimate fails a limit that is given, and passes
+    if neither limit is given.
+    """
+    teff = asarray(teff, dtype='d')
+    mask = ones(teff.size, bool)
+    if min_teff is not None:
+        mask &= teff >= min_teff
+    if max_teff is not None:
+        mask &= teff <= max_teff
+    return mask
+
+
+def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional[bool] = False,
+              min_teff: Optional[float] = None, max_teff: Optional[float] = None):
     """Read a small transiting planets around M dwarfs (STPM) catalogue.
 
     Parameters
@@ -45,6 +77,10 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
         smaller and a relative radius uncertainty of 8% or smaller.
     return_rho : bool, optional
         If ``True``, return the planet bulk densities instead of the planet masses.
+    min_teff : float, optional
+        Minimum host star effective temperature [K], inclusive. No lower limit by default.
+    max_teff : float, optional
+        Maximum host star effective temperature [K], inclusive. No upper limit by default.
 
     Returns
     -------
@@ -60,6 +96,9 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
     -----
     The uncertainties are the means of the lower and upper uncertainties given in the
     catalogue.
+
+    A planet whose host star has no effective temperature estimate is removed if either
+    temperature limit is given.
     """
     df = pd.read_csv(fname)
     df['eM_relative'] = 0.5*(df.euM_Mterra + df.edM_Mterra)/df.M_Mterra
@@ -69,6 +108,7 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
         m = (df.eM_relative <= 0.25) & (df.eR_relative <= 0.08)
     else:
         m = ones(df.eM_relative.size, bool)
+    m = asarray(m) & _teff_mask(df.Teff_K.values, min_teff, max_teff)
 
     planet_names = df[m]['Star'].values + ' ' + df[m]['Planet'].values
     radius_means = df[m].R_Rterra.values.copy()
@@ -84,12 +124,14 @@ def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional
         return planet_names, [radius_means, radius_uncertainties], [mass_means, mass_uncertainties]
 
 
-def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25,
+                min_teff: Optional[float] = None, max_teff: Optional[float] = None):
     """Read a TEPCat catalogue.
 
     Reads the catalogue, converts the planet radii and masses from Jupiter to Earth
     units, and removes the brown dwarfs, the planets without a mass or radius estimate,
-    and the planets with too uncertain a mass or radius.
+    the planets with too uncertain a mass or radius, and the planets whose host star
+    effective temperature is outside the given limits.
 
     Parameters
     ----------
@@ -99,6 +141,10 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
         Maximum allowed relative radius uncertainty.
     max_rel_m_err : float, optional
         Maximum allowed relative mass uncertainty.
+    min_teff : float, optional
+        Minimum host star effective temperature [K], inclusive. No lower limit by default.
+    max_teff : float, optional
+        Maximum host star effective temperature [K], inclusive. No upper limit by default.
 
     Returns
     -------
@@ -111,6 +157,9 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     -----
     The uncertainties are the means of the lower and upper uncertainties given in the
     catalogue.
+
+    A planet whose host star has no effective temperature estimate is removed if either
+    temperature limit is given.
     """
     df = pd.read_csv(fname)
     df = df[(df.M_b > 0.0) & (df.Type != 'BD')]
@@ -129,15 +178,17 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     numeric_columns = df.columns.drop('name')
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
-    return df
+    return df[_teff_mask(df.teff.values, min_teff, max_teff)]
 
 
-def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25):
+def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25,
+                      min_teff: Optional[float] = None, max_teff: Optional[float] = None):
     """Read an Exoplanet.eu catalogue.
 
     Reads the catalogue, converts the planet radii and masses from Jupiter to Earth
     units, and removes the unconfirmed planets, the planets without a radius, mass, or
-    orbital period estimate, and the planets with too uncertain a mass or radius.
+    orbital period estimate, the planets with too uncertain a mass or radius, and the
+    planets whose host star effective temperature is outside the given limits.
 
     Parameters
     ----------
@@ -147,6 +198,10 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
         Maximum allowed relative radius uncertainty.
     max_rel_m_err : float, optional
         Maximum allowed relative mass uncertainty.
+    min_teff : float, optional
+        Minimum host star effective temperature [K], inclusive. No lower limit by default.
+    max_teff : float, optional
+        Maximum host star effective temperature [K], inclusive. No upper limit by default.
 
     Returns
     -------
@@ -159,6 +214,10 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     -----
     The uncertainties are the means of the lower and upper uncertainties given in the
     catalogue.
+
+    A planet whose host star has no effective temperature estimate is removed if either
+    temperature limit is given. Exoplanet.eu does not give an effective temperature for
+    all its host stars.
     """
     df = pd.read_csv(fname)
     df.dropna(subset=['radius', 'radius_error_min', 'mass', 'mass_error_min', 'orbital_period'], inplace=True)
@@ -173,7 +232,7 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     numeric_columns = df.columns.drop('name')
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
-    return df
+    return df[_teff_mask(df.teff.values, min_teff, max_teff)]
 
 
 def normalize_planet_name(name: str) -> str:
@@ -296,7 +355,8 @@ def _match_planets(df: pd.DataFrame, max_separation: Optional[float], max_rel_pe
 def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
                   max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25,
                   files: Optional[dict[str, Path]] = None,
-                  max_separation: Optional[float] = 60.0, max_rel_period_diff: float = 0.01):
+                  max_separation: Optional[float] = 60.0, max_rel_period_diff: float = 0.01,
+                  min_teff: Optional[float] = None, max_teff: Optional[float] = None):
     """Read and combine any of the STPM, TEPCat, and Exoplanet.eu catalogues.
 
     Reads the chosen catalogues, identifies the planets found in several catalogues, gives
@@ -329,6 +389,10 @@ def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
     max_rel_period_diff : float, optional
         Maximum relative difference between the orbital periods for two planets to be matched
         by their positions and orbital periods.
+    min_teff : float, optional
+        Minimum host star effective temperature [K], inclusive. No lower limit by default.
+    max_teff : float, optional
+        Maximum host star effective temperature [K], inclusive. No upper limit by default.
 
     Returns
     -------
@@ -357,13 +421,16 @@ def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
     because the catalogues do not always give the planets of a system the same letters.
 
     The catalogues cover different host stars: STPM contains only M dwarfs, while TEPCat and
-    Exoplanet.eu contain all the spectral types. Use the ``mstar`` and ``teff`` columns to
-    select a consistent sample.
+    Exoplanet.eu contain all the spectral types. Use ``min_teff`` and ``max_teff``, or the
+    ``mstar`` column, to select a consistent sample.
+
+    The temperature limits are applied to each row before the planets are matched, so a planet
+    is kept only in the catalogues that place its host star inside the limits. A planet whose
+    host star has no effective temperature estimate is removed if either limit is given.
 
     Examples
     --------
-    >>> df = read_combined(['stpm', 'tepcat'])
-    >>> df = df[df.teff < 4000]
+    >>> df = read_combined(['stpm', 'tepcat'], max_teff=4000)
     >>> rme = RMEstimator(names=df.name.values, radii=(df.r.values, df.rerr.values),
     ...                   masses=(df.m.values, df.merr.values))
     """
@@ -382,6 +449,9 @@ def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
     def read(catalog):
         fname = files[catalog]
         if catalog == 'stpm':
+            # read_stpm is called unfiltered on purpose: the rows of the arrays it returns are
+            # matched one by one with the rows of the catalogue file read below. The quality and
+            # temperature cuts are applied to the combined table instead.
             names, (r, rerr), (m, merr) = read_stpm(fname, mask_bad=False)
             host = pd.read_csv(fname)
             # Some of the declinations in the catalogue file begin with a stray '='.
@@ -395,7 +465,8 @@ def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
             return read_exoplanet_eu(fname, max_rel_r_err, max_rel_m_err)[columns]
 
     df = pd.concat([read(c).assign(catalog=c) for c in catalogs], ignore_index=True)
-    df = df[(df.rerr / df.r < max_rel_r_err) & (df.merr / df.m < max_rel_m_err)].reset_index(drop=True)
+    mask = ((df.rerr / df.r < max_rel_r_err) & (df.merr / df.m < max_rel_m_err)).values
+    df = df[mask & _teff_mask(df.teff.values, min_teff, max_teff)].reset_index(drop=True)
     df['name'] = df['catalog_name'] = df.name.map(normalize_planet_name)
     df['name'] = df.name.groupby(_match_planets(df, max_separation, max_rel_period_diff)).transform('first')
     return df

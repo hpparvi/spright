@@ -250,8 +250,7 @@ by their host star positions and orbital periods.
     from spright import RMEstimator
     from spright.io import read_combined
 
-    df = read_combined(['stpm', 'tepcat', 'exoplanet_eu'])
-    df = df[df.teff < 4000]
+    df = read_combined(['stpm', 'tepcat', 'exoplanet_eu'], max_teff=4000)
     rme = RMEstimator(nsamples=100, names=df.name.values,
                       radii=(df.r.values, df.rerr.values),
                       masses=(df.m.values, df.merr.values))

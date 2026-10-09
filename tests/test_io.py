@@ -15,6 +15,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from pathlib import Path
+
 import pytest
 
 from spright.io import read_stpm, read_tepcat, read_exoplanet_eu, read_combined, normalize_planet_name
@@ -105,3 +106,67 @@ def test_read_combined_position_matching():
         periods = df[df.name == name].period
         assert periods.size == 2
         assert periods.max() / periods.min() - 1 < 0.01
+
+
+# Temperature limits that straddle the M dwarf / FGK boundary.
+TEFF_LO, TEFF_HI = 3200.0, 4000.0
+
+STPM = root / '../spright/data/stpm_230202.csv'
+TEPCAT = root / '../spright/data/TEPCat.csv'
+EXOEU = root / '../spright/data/exoplanet_eu.csv'
+
+
+@pytest.mark.parametrize('reader, fname', [(read_tepcat, TEPCAT), (read_exoplanet_eu, EXOEU)])
+def test_read_teff_limits(reader, fname):
+    """The limits are inclusive, and keep exactly the rows inside them."""
+    teff = reader(fname).teff
+
+    assert reader(fname, min_teff=TEFF_LO).shape[0] == (teff >= TEFF_LO).sum() > 0
+    assert reader(fname, max_teff=TEFF_HI).shape[0] == (teff <= TEFF_HI).sum() > 0
+
+    df = reader(fname, min_teff=TEFF_LO, max_teff=TEFF_HI)
+    assert df.shape[0] == ((teff >= TEFF_LO) & (teff <= TEFF_HI)).sum() > 0
+    assert df.teff.min() >= TEFF_LO and df.teff.max() <= TEFF_HI
+
+    # An exactly-inclusive bound keeps the row sitting on it.
+    assert (reader(fname, min_teff=teff.max()).teff == teff.max()).all()
+
+    # Omitting the limits changes nothing.
+    assert reader(fname, min_teff=None, max_teff=None).equals(reader(fname))
+
+
+def test_read_stpm_teff_limits():
+    """read_stpm returns arrays rather than a table, so check the planet count and membership."""
+    names = read_stpm(STPM)[0]
+    limited = read_stpm(STPM, min_teff=TEFF_LO, max_teff=TEFF_HI)[0]
+    assert 0 < limited.size < names.size
+    assert set(limited) <= set(names)
+
+    # STPM holds only M dwarfs (2566-4089 K), so these bracket the whole catalogue.
+    assert read_stpm(STPM, min_teff=5000.0)[0].size == 0
+    assert read_stpm(STPM, min_teff=1000.0, max_teff=1e4)[0].size == names.size
+
+    # The limits compose with mask_bad rather than replacing it.
+    assert read_stpm(STPM, mask_bad=False, max_teff=TEFF_HI)[0].size >= limited.size
+
+    # The radii and masses stay aligned with the names.
+    n, (r, rerr), (m, merr) = read_stpm(STPM, max_teff=TEFF_HI)
+    assert n.size == r.size == rerr.size == m.size == merr.size
+
+
+def test_read_teff_limits_drop_missing():
+    """Exoplanet.eu has host stars without a temperature; a limit must remove them."""
+    assert read_exoplanet_eu(EXOEU).teff.isna().any()
+    assert not read_exoplanet_eu(EXOEU, min_teff=0.0).teff.isna().any()
+    assert not read_exoplanet_eu(EXOEU, max_teff=1e6).teff.isna().any()
+
+
+def test_read_combined_teff_limits():
+    df = read_combined(min_teff=TEFF_LO, max_teff=TEFF_HI)
+    assert df.teff.min() >= TEFF_LO and df.teff.max() <= TEFF_HI
+    assert 0 < df.shape[0] < read_combined().shape[0]
+    assert not df.duplicated(['name', 'catalog']).any()
+    assert read_combined(min_teff=None, max_teff=None).equals(read_combined())
+
+    # STPM holds only M dwarfs, so an FGK cut must leave it out entirely.
+    assert 'stpm' not in set(read_combined(min_teff=5000.0).catalog)
