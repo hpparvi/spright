@@ -24,6 +24,42 @@ from .rdmodel import RadiusDensityModel
 
 
 class LPF(LogPosteriorFunction):
+    """Log posterior function for the radius-density mixture model.
+
+    Combines the model priors with the likelihood of the observed planet sample, where
+    the measurement uncertainties are represented by radius and density samples drawn
+    for each planet.
+
+    Parameters
+    ----------
+    radius_samples : ndarray
+        Planet radius samples [R_earth] with a shape ``(n_samples, n_planets)``.
+    density_samples : ndarray
+        Planet bulk density samples [g/cm^3] with a shape ``(n_samples, n_planets)``.
+    rdm : RadiusDensityModel
+        Theoretical radius-density models for the rocky planets and water worlds.
+
+    Attributes
+    ----------
+    ps : ParameterSet
+        Model parameters and their priors.
+    nsamples : int
+        Number of samples per planet.
+    nplanets : int
+        Number of planets.
+    radius_samples : ndarray
+        Planet radius samples.
+    density_samples : ndarray
+        Planet bulk density samples.
+    rdm : RadiusDensityModel
+        Theoretical radius-density models.
+
+    Notes
+    -----
+    In addition to the parameter priors, the log posterior includes a prior that rejects
+    the solutions where the sub-Neptune density is higher than the density of a rocky
+    planet with a zero iron ratio.
+    """
     def __init__(self, radius_samples: ndarray, density_samples: ndarray, rdm: RadiusDensityModel):
         super().__init__('RadiusDensityLPF')
         self._init_parameters()
@@ -51,6 +87,15 @@ class LPF(LogPosteriorFunction):
 
 
     def _init_parameters(self):
+        """Define the model parameters and their priors.
+
+        The parameters are, in order: the rocky transition start ``r1``, the puffy
+        transition end ``r4``, the relative water-world population width ``ww`` and shape
+        ``ws``, the rocky-planet iron ratio ``cr``, the water-world water ratio ``cw``,
+        the sub-Neptune density at two Earth radii ``ip`` and its exponent ``sp``, and the
+        log10 density-PDF scales ``log10_sr``, ``log10_sw``, and ``log10_sp`` of the
+        rocky, water-world, and sub-Neptune populations.
+        """
         self.ps = PS([GP('r1',       'rocky transition start',   'R_earth',   UP( 0.5, 2.5), ( 0.0, inf)),
                       GP('r4',       'puffy transition end',     'R_earth',   UP( 1.0, 4.0), ( 0.0, inf)),
                       GP('ww',       'relative ww population width', '', UP(0.0, 1.0), (0.0, 1.0)),
@@ -65,12 +110,48 @@ class LPF(LogPosteriorFunction):
         self.ps.freeze()
 
     def model(self, rho, radius, pv, component):
+        """Evaluate the radius-density mixture model.
+
+        Parameters
+        ----------
+        rho : float or ndarray
+            Planet bulk densities [g/cm^3].
+        radius : float or ndarray
+            Planet radii [R_earth].
+        pv : ndarray
+            Parameter vector.
+        component : ndarray
+            Multipliers for the rocky, water-world, and puffy components.
+
+        Returns
+        -------
+        ndarray
+            Weighted probability densities of the three components with a shape
+            ``(3, rho.size)``.
+
+        See Also
+        --------
+        spright.analytical_model.model : The function doing the actual computation.
+        """
         r = self.rdm
         return model(rho, radius, pv, component,
                      r._rr0, r._rdr, r._rx0, r._rdx, r.drocky,
                      r._wr0, r._wdr, r._wx0, r._wdx, r.dwater)
 
     def lnlikelihood(self, pv):
+        """Calculate the log likelihood.
+
+        Parameters
+        ----------
+        pv : ndarray
+            Parameter vector, or an array of parameter vectors with a shape
+            ``(n_vectors, n_parameters)``.
+
+        Returns
+        -------
+        ndarray
+            Log likelihoods with a shape ``(n_vectors,)``.
+        """
         r = self.rdm
         return lnlikelihood_vp(pv, self.density_samples, self.radius_samples,
                                r._rr0, r._rdr, r._rx0, r._rdx, r.drocky,
