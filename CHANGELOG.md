@@ -6,6 +6,14 @@ Spright uses calendar versioning (`YY.0M.0D`) since v22.12.10. The two versions 
 ## Unreleased
 
 ### Added
+- `RMEstimator` averages the likelihood over measurements sharing a planet name, so several
+  catalogues can be combined by concatenating them.
+- `read_combined` to read and combine any of the STPM, TEPCat, and Exoplanet.eu catalogues.
+  The planets are matched between the catalogues by their normalised names
+  (`normalize_planet_name`) and by their host star positions and orbital periods.
+- Unit tests for `RMEstimator` sample creation.
+- "How Spright works" documentation page describing how the relation is modelled, estimated,
+  and used, with figures created at build time.
 - Docstrings for `rmestimator.py` and `analytical_model.py`.
 - GPLv3 license headers to all source and test files.
 - `docs` optional dependency group (`pip install spright[docs]`).
@@ -17,6 +25,15 @@ Spright uses calendar versioning (`YY.0M.0D`) since v22.12.10. The two versions 
 - The documentation reads its version from the installed package.
 - Read the Docs installs the package before building the documentation.
 - Notebooks and IDE files are excluded from the source distribution.
+- `read_tepcat` and `read_exoplanet_eu` now return numeric columns instead of `object` columns.
+- `read_tepcat` and `read_exoplanet_eu` also return the host star coordinates, and `read_tepcat`
+  the orbital period.
+
+### Fixed
+- The mode location of unimodal `Distribution` fits was set to the distribution scale.
+- `Distribution` summary labelled the 68% interval as 64%.
+- `RMRelation.predict_density` identified the distribution modes using the mean density in place
+  of the mean radius, which gave a poor distribution model fit.
 
 ## v25.06.03 (2025-06-03)
 

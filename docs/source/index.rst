@@ -67,6 +67,7 @@ predicted numerical distributions.
    :maxdepth: 2
    :caption: Contents:
 
+   theory
    api/api
 
 
