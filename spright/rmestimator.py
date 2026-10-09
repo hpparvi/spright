@@ -22,8 +22,9 @@ from astropy.table import Table
 from astropy.time import Time
 from matplotlib.pyplot import subplots, setp
 from numpy import pi, diag, array, full, linspace, meshgrid, asarray, zeros, argmin, sort, ones, squeeze, isfinite, \
-    ndarray, nan, clip, inf
+    ndarray, nan, clip, inf, arange, array_split, bincount, flatnonzero
 from numpy.random import multivariate_normal, permutation, seed, normal
+from pandas import factorize
 from scipy.optimize import minimize
 
 from .rdmodel import RadiusDensityModel
@@ -46,12 +47,22 @@ class RMEstimator:
     The standard workflow is to optimize the model parameters globally, sample the parameter posterior using MCMC,
     compute the relation maps, and save the maps into a FITS file that can be read by `RMRelation`.
 
+    Several catalogues can be combined by concatenating their names, radii, and masses (or densities). Measurements
+    sharing a planet name are treated as alternative measurements of the same planet, and the planet's likelihood is
+    averaged over them. This marginalises over the choice of the catalogue planet by planet without counting any
+    planet twice. The names must match exactly, so they need to be normalised before combining catalogues that use
+    different naming conventions.
+
     Attributes
     ----------
     planet_names: ndarray
-        Names of the planets in the sample.
+        Planet names, one for each measurement.
+    unique_planet_names: ndarray
+        Names of the unique planets in the sample in the order of their first appearance.
+    nmeasurements: int
+        Number of measurements in the sample.
     nplanets: int
-        Number of planets in the sample.
+        Number of unique planets in the sample.
     nsamples: int
         Number of samples drawn per planet.
     radius_samples: ndarray
@@ -84,7 +95,7 @@ class RMEstimator:
         nsamples
             Number of samples to draw from each planet's radius and mass (or density) measurement.
         names
-            Planet names.
+            Planet names. Measurements sharing a name are treated as alternative measurements of the same planet.
         radii
             Planet radii in Earth radii as a tuple of (means, uncertainties) arrays.
         masses
@@ -102,6 +113,9 @@ class RMEstimator:
         -----
         Either the masses or the densities need to be given. If both are given, the masses take precedence and the
         densities are ignored.
+
+        The number of samples needs to be at least as large as the largest number of measurements given for a
+        single planet.
         """
 
         self.radius_means: Optional[ndarray] = None
@@ -116,8 +130,11 @@ class RMEstimator:
         self.density_samples: Optional[ndarray] = None
 
         self.seed: Optional[int] = seed
+        self.unique_planet_names: Optional[ndarray] = None
+        self.nmeasurements: int = 0
         self.nplanets: int = 0
         self.nsamples: int = 0
+        self._planet_index: Optional[ndarray] = None
 
         self._init_data(names, radii, masses, densities)
         self._create_samples(nsamples)
@@ -137,10 +154,13 @@ class RMEstimator:
                    densities: tuple[ndarray, ndarray]):
         """Stores the planet names and the radius and mass (or density) measurements.
 
+        Identifies the unique planets from the planet names, so that the measurements sharing a name can be pooled
+        in `_create_samples`.
+
         Parameters
         ----------
         names
-            Planet names.
+            Planet names, one for each measurement.
         radii
             Planet radii in Earth radii as a tuple of (means, uncertainties) arrays.
         masses
@@ -156,7 +176,9 @@ class RMEstimator:
             self.mass_means, self.mass_uncertainties = masses
         else:
             self.density_means, self.density_uncertainties = densities
-        self.nplanets = self.planet_names.size
+        self._planet_index, self.unique_planet_names = factorize(self.planet_names)
+        self.nmeasurements = self.planet_names.size
+        self.nplanets = self.unique_planet_names.size
 
     def _create_samples(self, nsamples: int):
         """Creates the radius, mass, and density samples used in the inference.
@@ -167,28 +189,56 @@ class RMEstimator:
         the sample means and standard deviations. If it was initialised with densities, the mass samples are set to
         NaN.
 
+        If a planet has several measurements, its `nsamples` samples are divided evenly between the measurements.
+        The planet's likelihood is the model averaged over its samples, so this averages the likelihood over the
+        alternative measurements.
+
         Parameters
         ----------
         nsamples
             Number of samples to draw per planet.
+
+        Raises
+        ------
+        ValueError
+            If `nsamples` is smaller than the largest number of measurements given for a single planet.
         """
+        max_measurements = bincount(self._planet_index).max()
+        if nsamples < max_measurements:
+            raise ValueError(f"The number of samples ({nsamples}) must be at least as large as the largest number "
+                             f"of measurements given for a single planet ({max_measurements}).")
+
+        # Divide the samples of each planet between its measurements
+        # -----------------------------------------------------------
+        # Each measurement is given a (planet index, sample slice) pair. The measurements are ordered
+        # by planet so that the samples are drawn planet by planet.
+        blocks = []
+        for i in range(self.nplanets):
+            measurements = flatnonzero(self._planet_index == i)
+            for j, ix in zip(measurements, array_split(arange(nsamples), measurements.size)):
+                blocks.append((j, i, slice(ix[0], ix[-1] + 1)))
+
+        def draw(means, uncertainties, samples):
+            for j, i, sl in blocks:
+                samples[sl, i] = clip(normal(means[j], uncertainties[j], size=sl.stop - sl.start), 0, inf)
+
         seed(self.seed)
         self.nsamples = nsamples
         self.radius_samples = r = zeros((nsamples, self.nplanets))
         self.mass_samples = m = zeros((nsamples, self.nplanets))
         self.density_samples = zeros((nsamples, self.nplanets))
-        for i in range(self.nplanets):
-            self.radius_samples[:, i] = clip(normal(self.radius_means[i], self.radius_uncertainties[i], size=nsamples), 0, inf)
+        draw(self.radius_means, self.radius_uncertainties, self.radius_samples)
         if self.density_means is None:
-            for i in range(self.nplanets):
-                self.mass_samples[:, i] = clip(normal(self.mass_means[i], self.mass_uncertainties[i], size=nsamples), 0, inf)
+            draw(self.mass_means, self.mass_uncertainties, self.mass_samples)
             self.density_samples[:] = ((m * mearth) / (4 / 3 * pi * (r * rearth) ** 3))
-            self.density_means = self.density_samples.mean(0)
-            self.density_uncertainties = self.density_samples.std(0)
+            self.density_means = zeros(self.nmeasurements)
+            self.density_uncertainties = zeros(self.nmeasurements)
+            for j, i, sl in blocks:
+                self.density_means[j] = self.density_samples[sl, i].mean()
+                self.density_uncertainties[j] = self.density_samples[sl, i].std()
         else:
             self.mass_samples[:] = nan
-            for i in range(self.nplanets):
-                self.density_samples[:, i] = clip(normal(self.density_means[i], self.density_uncertainties[i], size=nsamples), 0, inf)
+            draw(self.density_means, self.density_uncertainties, self.density_samples)
 
     def add_lnprior(self, lnprior):
         """Adds an additional log prior to the log posterior function.
@@ -315,6 +365,9 @@ class RMEstimator:
 
     def save(self, filename: Optional[Path] = None):
         """Saves the relation maps, posterior samples, and the planet catalogue into a FITS file.
+
+        The catalogue contains one row per measurement, so a planet with several measurements is listed several
+        times.
 
         Parameters
         ----------
@@ -488,8 +541,8 @@ class RMEstimator:
             for i in range(3):
                 ax.contour(pdf[i, :, :], extent=(radlim[0], radlim[1], rholim[0], rholim[1]), levels=levels[i], colors='w')
 
-        rhom, rhoe = self.lpf.density_samples.mean(0), self.lpf.density_samples.std(0)
-        ax.errorbar(self.radius_means, rhom, xerr=self.radius_uncertainties, yerr=rhoe, fmt='ow', alpha=0.5)
+        ax.errorbar(self.radius_means, self.density_means, xerr=self.radius_uncertainties,
+                    yerr=self.density_uncertainties, fmt='ow', alpha=0.5)
         setp(ax, xlabel=r'Radius [R$_\oplus$]', ylabel=r'Density [g/cm$^3$]', ylim=(0, 15))
         if fig is not None:
             fig.tight_layout()

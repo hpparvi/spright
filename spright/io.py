@@ -14,12 +14,23 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from pathlib import Path
-from typing import Optional
+import re
 
+from pathlib import Path
+from typing import Optional, Iterable
+
+import astropy.units as u
 import pandas as pd
+from astropy.coordinates import SkyCoord, search_around_sky
 from astropy.units.astrophys import M_jup, M_earth, R_jup, R_earth
-from numpy import ones, transpose
+from numpy import ones, transpose, arange, argsort, isfinite
+
+from .core import root
+
+_host_aliases = {'Gliese': 'GJ', 'Gl': 'GJ'}
+_catalog_files = {'stpm': root / 'data/stpm_230202.csv',
+                  'tepcat': root / 'data/TEPCat.csv',
+                  'exoplanet_eu': root / 'data/exoplanet_eu.csv'}
 
 
 def read_stpm(fname: Path, mask_bad: Optional[bool] = True, return_rho: Optional[bool] = False):
@@ -93,7 +104,8 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     -------
     DataFrame
         Catalogue with the columns ``name``, ``r`` and ``rerr`` [R_earth], ``m`` and
-        ``merr`` [M_earth], ``mstar`` [M_sun], ``teff`` [K], and ``teq`` [K].
+        ``merr`` [M_earth], ``period`` [d], ``mstar`` [M_sun], ``teff`` [K], ``teq`` [K],
+        and ``ra`` and ``dec`` [deg].
 
     Notes
     -----
@@ -111,8 +123,9 @@ def read_tepcat(fname: Path, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     merr = (df.iloc[:, ix + 1: ix + 3].mean(1).values*M_jup).to(M_earth).value
     l = (merr > 0.0) & (rerr > 0.0)
     df = df[l]
-    df = pd.DataFrame(transpose([df['System'].values, r[l], rerr[l], m[l], merr[l], df.M_A, df.Teff, df.Teq]),
-                      columns='name r rerr m merr mstar teff teq'.split())
+    df = pd.DataFrame(transpose([df['System'].values, r[l], rerr[l], m[l], merr[l], df['Period(day)'], df.M_A,
+                                 df.Teff, df.Teq, df['RA(deg)'], df['Dec(deg)']]),
+                      columns='name r rerr m merr period mstar teff teq ra dec'.split())
     numeric_columns = df.columns.drop('name')
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
@@ -139,8 +152,8 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     -------
     DataFrame
         Catalogue with the columns ``name``, ``r`` and ``rerr`` [R_earth], ``m`` and
-        ``merr`` [M_earth], ``period`` [d], ``mstar`` [M_sun], ``teff`` [K], and
-        ``teq`` [K].
+        ``merr`` [M_earth], ``period`` [d], ``mstar`` [M_sun], ``teff`` [K], ``teq`` [K],
+        and ``ra`` and ``dec`` [deg].
 
     Notes
     -----
@@ -154,9 +167,235 @@ def read_exoplanet_eu(fname, max_rel_r_err: float = 0.08, max_rel_m_err: float =
     rerr = (df[['radius_error_min', 'radius_error_max']].mean(1).values * R_jup).to(R_earth).value
     m = (df.mass.values*M_jup).to(M_earth).value
     merr = (df[['mass_error_min', 'mass_error_max']].mean(1).values * M_jup).to(M_earth).value
-    df = pd.DataFrame(transpose([df.name.values, r, rerr, m, merr, df.orbital_period, df.star_mass, df.star_teff, df.temp_calculated]),
-                      columns='name r rerr m merr period mstar teff teq'.split())
+    df = pd.DataFrame(transpose([df.name.values, r, rerr, m, merr, df.orbital_period, df.star_mass, df.star_teff,
+                                 df.temp_calculated, df.ra, df.dec]),
+                      columns='name r rerr m merr period mstar teff teq ra dec'.split())
     numeric_columns = df.columns.drop('name')
     df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
     df = df[(df.rerr/df.r < max_rel_r_err) & (df.merr/df.m < max_rel_m_err)]
+    return df
+
+
+def normalize_planet_name(name: str) -> str:
+    """Normalise a planet name to a common form shared by the supported catalogues.
+
+    The catalogues write the same planet in different ways, such as ``K2-018b`` (TEPCat),
+    ``K2-18 b`` (STPM), and ``KELT-3 Ab`` (Exoplanet.eu). The normalised name has the form
+    ``<host> <planet letter>``.
+
+    Parameters
+    ----------
+    name : str
+        Planet name.
+
+    Returns
+    -------
+    str
+        Normalised planet name.
+
+    Notes
+    -----
+    The normalisation
+
+    - replaces underscores with spaces and removes extra whitespace,
+    - separates the planet letter from the host name, and adds the letter ``b`` to a name
+      that ends with a number and has no planet letter (the TEPCat convention),
+    - removes the stellar component (``A``, ``B``, ``C``, or ``(AB)``) preceding the planet
+      letter,
+    - removes the zero padding from numbers, except from coordinate-based names, and
+    - replaces the ``Gliese`` and ``Gl`` catalogue prefixes with ``GJ``.
+
+    A name ending with a separate capital letter and no planet letter (such as
+    ``HD 130948 B``) is assumed to be a companion named after its host and is left as it is.
+    Different designations of the same host (such as ``HD 3167`` and ``K2-96``) are not
+    recognised as the same planet.
+    """
+    s = re.sub(r'\s+', ' ', name.replace('_', ' ')).strip()
+
+    if (m := re.match(r'^(.*\d|.*\(AB\)|.*[ \d][ABC])([b-z])$', s)) or (m := re.match(r'^(.*) ([b-z])$', s)):
+        host, letter = m.group(1).strip(), m.group(2)
+        host = re.sub(r'\s*\(AB\)$', '', host)
+        host = re.sub(r'(?<=\d)[ABC]$| [ABC]$', '', host)
+    elif m := re.match(r'^(.*\d)[ABC]?$', s):
+        host, letter = m.group(1), 'b'
+    else:
+        return s
+
+    if not re.search(r'\d{4}[+-]\d{2,}', host):
+        host = re.sub(r'(?<=[A-Za-z0-9][- ])0+(?=\d)', '', host)
+    prefix, _, rest = host.partition(' ')
+    if rest and prefix in _host_aliases:
+        host = f'{_host_aliases[prefix]} {rest}'
+    return f'{host} {letter}'
+
+
+def _match_planets(df: pd.DataFrame, max_separation: Optional[float], max_rel_period_diff: float):
+    """Group the rows of a combined catalogue that refer to the same planet.
+
+    Two rows from different catalogues are taken to be the same planet if their normalised
+    names match ignoring the letter case, spaces, and hyphens, or if their host stars are
+    close to each other in the sky and their orbital periods agree.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Combined catalogue with the columns ``name``, ``period``, ``ra``, ``dec``, and
+        ``catalog``.
+    max_separation : float or None
+        Maximum angular separation between the host stars in arcseconds. The planets are
+        matched using only their names if ``None``.
+    max_rel_period_diff : float
+        Maximum relative difference between the orbital periods.
+
+    Returns
+    -------
+    ndarray
+        Group label for each row. The label is the index of the first row of the group.
+
+    Notes
+    -----
+    A group never contains two rows from the same catalogue: a match that would bring two
+    such rows together is skipped. The position matches are applied first, from the smallest
+    separation to the largest, and the name matches after them. A position match so overrides
+    a conflicting name match, which happens when the catalogues give the planets of a system
+    different letters.
+    """
+    labels = arange(df.shape[0])
+    members = {i: {c} for i, c in enumerate(df.catalog.values)}
+
+    def find(i):
+        while labels[i] != i:
+            labels[i] = labels[labels[i]]
+            i = labels[i]
+        return i
+
+    def union(i, j):
+        i, j = sorted((find(i), find(j)))
+        if i != j and not (members[i] & members[j]):
+            labels[j] = i
+            members[i] |= members.pop(j)
+
+    if max_separation is not None:
+        ok = isfinite(df.ra.values) & isfinite(df.dec.values) & (df.period.values > 0)
+        rows = arange(df.shape[0])[ok]
+        sc = SkyCoord(df.ra.values[ok] * u.deg, df.dec.values[ok] * u.deg)
+        i1, i2, sep, _ = search_around_sky(sc, sc, max_separation * u.arcsec)
+        p = df.period.values[ok]
+        m = (i1 < i2) & (abs(p[i1] - p[i2]) <= max_rel_period_diff * p[i1])
+        for k in argsort(sep[m]):
+            union(rows[i1[m][k]], rows[i2[m][k]])
+
+    key = df.name.str.lower().str.replace(r'[ -]', '', regex=True)
+    for ix in key.groupby(key).indices.values():
+        for j in ix[1:]:
+            union(ix[0], j)
+
+    return pd.Series(labels).map(find).values
+
+
+def read_combined(catalogs: Iterable[str] = ('stpm', 'tepcat', 'exoplanet_eu'),
+                  max_rel_r_err: float = 0.08, max_rel_m_err: float = 0.25,
+                  files: Optional[dict[str, Path]] = None,
+                  max_separation: Optional[float] = 60.0, max_rel_period_diff: float = 0.01):
+    """Read and combine any of the STPM, TEPCat, and Exoplanet.eu catalogues.
+
+    Reads the chosen catalogues, identifies the planets found in several catalogues, gives
+    each planet the same name in all the catalogues, and concatenates the catalogues into a
+    single table. A planet found in several catalogues has one row for each catalogue.
+    `RMEstimator` treats the rows sharing a name as alternative measurements of the same
+    planet.
+
+    Two rows from different catalogues are taken to be the same planet if their normalised
+    names match, or if their host stars are within ``max_separation`` from each other in the
+    sky and their orbital periods agree within ``max_rel_period_diff``. The latter identifies
+    the planets whose host stars have a different designation in different catalogues (such
+    as ``HD 15337`` and ``TOI-402``).
+
+    Parameters
+    ----------
+    catalogs : iterable of {'stpm', 'tepcat', 'exoplanet_eu'}, optional
+        Catalogues to combine, or a single catalogue name. All three are combined by default.
+    max_rel_r_err : float, optional
+        Maximum allowed relative radius uncertainty.
+    max_rel_m_err : float, optional
+        Maximum allowed relative mass uncertainty.
+    files : dict, optional
+        Paths to the catalogue CSV files keyed by the catalogue name. The catalogue files
+        shipped with the package are used for the catalogues without an entry.
+    max_separation : float, optional
+        Maximum angular separation between the host stars in arcseconds for two planets to
+        be matched by their positions and orbital periods. The planets are matched using
+        only their names if ``None``.
+    max_rel_period_diff : float, optional
+        Maximum relative difference between the orbital periods for two planets to be matched
+        by their positions and orbital periods.
+
+    Returns
+    -------
+    DataFrame
+        Combined catalogue with the columns ``name``, ``r`` and ``rerr`` [R_earth], ``m`` and
+        ``merr`` [M_earth], ``period`` [d], ``mstar`` [M_sun], ``teff`` [K], ``ra`` and
+        ``dec`` [deg], ``catalog``, and ``catalog_name``, the normalised name of the planet
+        in its catalogue.
+
+    Raises
+    ------
+    ValueError
+        If no catalogues are given, or if a catalogue name is not recognised or is repeated.
+
+    Notes
+    -----
+    The names are matched ignoring the letter case, spaces, and hyphens in the normalised
+    names (see `normalize_planet_name`). A planet is given the name it has in the first
+    catalogue it is found in, where the catalogues are searched in the order they are given.
+    Two rows from the same catalogue are never taken to be the same planet.
+
+    The host star coordinates are not consistent between the catalogues, and can differ by
+    tens of arcseconds for a star with a high proper motion. The default maximum separation
+    is loose because of this, and it is the agreement of the orbital periods that makes the
+    match reliable. A match by position and period takes precedence over a match by name,
+    because the catalogues do not always give the planets of a system the same letters.
+
+    The catalogues cover different host stars: STPM contains only M dwarfs, while TEPCat and
+    Exoplanet.eu contain all the spectral types. Use the ``mstar`` and ``teff`` columns to
+    select a consistent sample.
+
+    Examples
+    --------
+    >>> df = read_combined(['stpm', 'tepcat'])
+    >>> df = df[df.teff < 4000]
+    >>> rme = RMEstimator(names=df.name.values, radii=(df.r.values, df.rerr.values),
+    ...                   masses=(df.m.values, df.merr.values))
+    """
+    catalogs = [catalogs] if isinstance(catalogs, str) else list(catalogs)
+    files = {**_catalog_files, **(files or {})}
+    if not catalogs:
+        raise ValueError('At least one catalogue is needed.')
+    if unknown := set(catalogs) - set(_catalog_files):
+        raise ValueError(f'Unknown catalogues {sorted(unknown)}, the catalogues must be chosen from '
+                         f'{list(_catalog_files)}.')
+    if len(set(catalogs)) < len(catalogs):
+        raise ValueError('Each catalogue can be given only once.')
+
+    columns = 'name r rerr m merr period mstar teff ra dec'.split()
+
+    def read(catalog):
+        fname = files[catalog]
+        if catalog == 'stpm':
+            names, (r, rerr), (m, merr) = read_stpm(fname, mask_bad=False)
+            host = pd.read_csv(fname)
+            # Some of the declinations in the catalogue file begin with a stray '='.
+            sc = SkyCoord(host.RA_J2000.values, host.DE_J2000.str.lstrip('=').values, unit=(u.hourangle, u.deg))
+            return pd.DataFrame({'name': names, 'r': r, 'rerr': rerr, 'm': m, 'merr': merr,
+                                 'period': host.Porb_d.values, 'mstar': host.M_Msol.values,
+                                 'teff': host.Teff_K.values, 'ra': sc.ra.deg, 'dec': sc.dec.deg})
+        elif catalog == 'tepcat':
+            return read_tepcat(fname, max_rel_r_err, max_rel_m_err)[columns]
+        else:
+            return read_exoplanet_eu(fname, max_rel_r_err, max_rel_m_err)[columns]
+
+    df = pd.concat([read(c).assign(catalog=c) for c in catalogs], ignore_index=True)
+    df = df[(df.rerr / df.r < max_rel_r_err) & (df.merr / df.m < max_rel_m_err)].reset_index(drop=True)
+    df['name'] = df['catalog_name'] = df.name.map(normalize_planet_name)
+    df['name'] = df.name.groupby(_match_planets(df, max_separation, max_rel_period_diff)).transform('first')
     return df
